@@ -1,0 +1,5 @@
+run.sh
+main
+slurms/
+slurm*
+.vscode/

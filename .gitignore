@@ -4,3 +4,5 @@ slurm*
 run.sh
 main
 data/
+env/
+graphs/

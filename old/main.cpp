@@ -1,5 +1,6 @@
+// interact -q batch -n 32 -m 64g -t 12:00:00
 // g++ main.cpp -o main -fopenmp -O3
-#define NUM_CORES 32
+#define NUM_CORES 8
 
 #include <algorithm>
 #include <chrono>
@@ -9,6 +10,8 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <numeric>
+#include <memory>
 
 
 #include "utils.hpp"
@@ -31,23 +34,28 @@ float compute_distance(float* index1_ptr, float* index2_ptr) {
 
 /* graph + search */
 std::vector<std::vector<std::pair<float,uint>>> graph;
+std::vector<std::mutex> node_mutexes(3001496); // size should be dataset_size, but this is a quick fix for the example
 uint num_neighbors = 64;
 void init_random_graph();
 std::unique_ptr<VisitedListPool> visitedListPool_{nullptr};
 std::priority_queue<std::pair<float, uint>> internal_beam_search(float* query_ptr, uint start_node, uint beam_size=1, uint max_iterations=1000);
 void update_graph(uint node, std::priority_queue<std::pair<float,uint>>& new_neighbors);
 void update_graph1(uint node, std::priority_queue<std::pair<float,uint>>& new_neighbors);
+void update_graph_parallel(uint node, const std::vector<std::pair<float,uint>>& new_neighbors);
 double measure_neighbors_accuracy(const std::vector<uint>& gt_neighbors, const std::vector<std::pair<float,uint>>& neighbors, int k);
 double measure_graph_quality(const std::vector<std::vector<uint>>& gt_graph, const std::vector<std::vector<std::pair<float, uint>>>& knn_graph, uint k);
+void queue_to_reverse_vector(std::priority_queue<std::pair<float, uint>>& pq, std::vector<std::pair<float, uint>>& vec);
+
 
 // MARK: MAIN
 int main() {
-    uint beam_size = 64;
     uint k = 15;
+    num_neighbors = 30;
+    uint beam_size = 30;
 
     /* Loading dataset */
     printf("Loading dataset...\n");
-    std::string data_filename = "/users/cfoste18/data/cfoste18/knn-construction/sisap25-example-python/data/gooaq-N-3001496-D-384-fp32.bin";
+    std::string data_filename = "/users/cfoste18/data/cfoste18/knn-construction/data/gooaq-N-3001496-D-384-fp32.bin";
     load_dataset_google_qa(data_filename, data_pointer, dataset_size, dimension);
     printf("Google QA dataset\n");
     printf(" * N=%u\n", (uint)dataset_size);
@@ -56,49 +64,79 @@ int main() {
     distFunc_ = space->get_dist_func();
     distFuncParam_ = space->get_dist_func_param();
     visitedListPool_ = std::unique_ptr<VisitedListPool>(new VisitedListPool(NUM_CORES, dataset_size));
+    // node_mutexes.resize(dataset_size);
 
     /* Loading ground truth */
-    std::string gt_filename = "/users/cfoste18/data/cfoste18/knn-construction/sisap25-example-python/data/knn-gooaq-N-3001496-k-32-int32.bin";
+    std::string gt_filename = "/users/cfoste18/data/cfoste18/knn-construction/data/knn-gooaq-N-3001496-k-32-int32.bin";
     load_gt_google_qa(gt_filename, gt_graph, dataset_size, gt_k);
     printf(" * gt_k=%u\n", (uint) gt_k);
 
     /* Initialize graph */
     printf("Initializing random graph...\n");
+    printf(" * num_neighbors=%u\n", num_neighbors);
     init_random_graph();
 
-    printf("Performing beam searches to update the graph...\n");
-    printf("Iteration, Time (s), Accuracy, Current Memory (MB), Peak Memory (MB)\n");
-    srand(5);
+    /* create a random ordering for the nodes */
+    srand(4);
+    std::vector<uint> random_ordering(dataset_size);
+    std::iota(random_ordering.begin(), random_ordering.end(), 0);
+    std::random_shuffle(random_ordering.begin(), random_ordering.end());
+
+    /* create random start nodes */
+    srand(7);
+    std::vector<uint> random_starts(dataset_size);
+    std::iota(random_starts.begin(), random_starts.end(), 0);
+    std::random_shuffle(random_starts.begin(), random_starts.end());
+
+    /* update in batches */
+    uint batch_size = 10000;
+    std::vector<std::vector<std::pair<float,uint>>> batch_neighbors(batch_size, std::vector<std::pair<float,uint>>(num_neighbors, {HUGE_VALF, 0}));
+
+    /* update in batches */
+    printf("Batch graph updates...\n");
+    printf("Iteration, Time (s), Accuracy, Peak Memory (MB)\n");
     auto tStart = std::chrono::high_resolution_clock::now();
-    for (uint q = 0; q < dataset_size; q++) { // 
-        float* query_ptr = data_pointer + q*dimension;
+    uint batch_begin = 0;
+    while (batch_begin < dataset_size) {
+        uint batch_end = batch_begin + batch_size;
+        if (batch_end > dataset_size) batch_end = dataset_size;
 
-        // perform a beam search
-        uint rand_start = rand() % dataset_size;
-        auto res = internal_beam_search(query_ptr, rand_start, beam_size);
-        while (res.size() > num_neighbors) res.pop();
-        // printf("done searching...\n");
+        /* perform the searches in parallel */
+        #pragma omp parallel for num_threads(NUM_CORES)
+        for (uint q = batch_begin; q < batch_end; q++) {
+            uint qid = q - batch_begin;
+            uint query_node = random_ordering[q];
+            float* query_ptr = data_pointer + query_node*dimension;
+            
+            /* perform a beam search */
+            uint rand_start = random_starts[q];
+            auto res = internal_beam_search(query_ptr, rand_start, beam_size);
+            while (res.size() > num_neighbors) res.pop();
 
-        /* update the graph */
-        update_graph1(q, res);
-        // printf("done updating...\n");
-
-        /* measure accuracy */
-        if (q % 10000 == 0) {
-            // double accuracy = measure_neighbors_accuracy(gt_graph[q], graph[q], k);
-            double accuracy = measure_graph_quality(gt_graph, graph, k);
-            auto tEnd = std::chrono::high_resolution_clock::now();
-            double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
-            size_t peak_memory = getPeakRSS();
-            size_t current_memory = getCurrentRSS();
-            printf("%u, %.2f, %.5f, %.3f\n", q, time, 100 * accuracy, (double) peak_memory / 1024 / 1024);
-            fflush(stdout);
+            /* save the neighbors */
+            queue_to_reverse_vector(res, batch_neighbors[qid]);
         }
+
+        /* batch update of the graph */
+        #pragma omp parallel for num_threads(NUM_CORES)
+        for (uint q = batch_begin; q < batch_end; q++) {
+            uint qid = q - batch_begin;
+            uint query_node = random_ordering[q];
+            update_graph_parallel(query_node, batch_neighbors[qid]);
+        }
+
+        /* output stats */
+        double accuracy = measure_graph_quality(gt_graph, graph, k);
+        auto tEnd = std::chrono::high_resolution_clock::now();
+        double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+        size_t peak_memory = getPeakRSS();
+        size_t current_memory = getCurrentRSS();
+        printf("%u, %.2f, %.5f, %.3f\n", batch_end, time, 100 * accuracy, (double) peak_memory / 1024 / 1024);
+        fflush(stdout);
+
+        /* setup next batch */
+        batch_begin = batch_end;
     }
-
-
-
-
 
     delete space;
     if (data_pointer != nullptr) delete[] data_pointer;
@@ -121,12 +159,17 @@ void init_random_graph() {
         graph[x] = neighbors;
     }
 
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(NUM_CORES)
     for (uint x = 0; x < dataset_size; x++) {
+
+        // compute distances
         for (uint m = 0; m < num_neighbors; m++) {
             uint node = graph[x][m].second;
             graph[x][m].first = compute_distance(data_pointer+x*dimension, data_pointer+node*dimension);
         }
+
+        // sort
+        std::sort(graph[x].begin(), graph[x].end());
     }
 }
 
@@ -251,6 +294,7 @@ void update_graph1(uint node, std::priority_queue<std::pair<float,uint>>& new_ne
 
         /* insert into neighbors' neighbors */
         if (insert_place < num_neighbors) {
+            neighbors_neighbors.pop_back(); // remove last element first to avoid resizing vec
             neighbors_neighbors.insert(neighbors_neighbors.begin() + insert_place, {neighbor_dist, node});
         }
 
@@ -265,6 +309,73 @@ void update_graph1(uint node, std::priority_queue<std::pair<float,uint>>& new_ne
     }
     graph[node] = neighbors;
 }
+
+/* this is done in parallel */
+void update_graph_parallel(uint node, const std::vector<std::pair<float,uint>>& new_neighbors) {
+    
+    /* Update the graph with outgoing links */
+    {
+        // lock the node --> maybe not needed this early
+        // std::lock_guard<std::mutex> lock(node_mutexes[node]); 
+
+        /* Add the new neighbors*/
+        UniquePriorityQueue pq;
+        for (auto val : new_neighbors) {
+            if (pq.size() < num_neighbors || val.first < pq.top().first) {
+                pq.push(val);
+                if (pq.size() > num_neighbors) pq.pop_fast();
+            }
+        }
+        while (pq.size() > num_neighbors) pq.pop_fast();
+
+        /* Add the existing neighbors */
+        std::lock_guard<std::mutex> lock(node_mutexes[node]); 
+        for (auto val : graph[node]) {
+            if (pq.size() < num_neighbors || val.first < pq.top().first) {
+                pq.push(val);
+                if (pq.size() > num_neighbors) pq.pop_fast();
+            }
+        }
+        while (pq.size() > num_neighbors) pq.pop_fast();
+
+        /* Update the graph with these outgoing neighbors */
+        std::vector<std::pair<float,uint>> neighbors(num_neighbors);
+        for (int m = num_neighbors - 1; m >= 0; m--) {
+            neighbors[m] = pq.top();
+            pq.pop_fast();
+        }
+        graph[node] = neighbors;
+    }
+
+    /* Update the graph with ingoing links */
+    for (auto val : new_neighbors) {
+        uint neighbor_node = val.second;
+        float neighbor_dist = val.first;
+        std::lock_guard<std::mutex> lock(node_mutexes[neighbor_node]); 
+        
+        /* find place to insert into neighbors' neighbors */
+        std::vector<std::pair<float,uint>>& neighbors_neighbors = graph[neighbor_node];
+        int insert_place = 10000;
+        for (int m = num_neighbors; m > 0; m--) {
+            if (node == neighbors_neighbors[m-1].second) {
+                insert_place = 10000;
+                break;
+            }
+            if (neighbor_dist < neighbors_neighbors[m-1].first) {
+                insert_place = m - 1;
+            }
+        }
+
+        /* insert into neighbors' neighbors */
+        if (insert_place < num_neighbors) {     
+            neighbors_neighbors.pop_back(); // remove last element first to avoid resizing vec; 
+            neighbors_neighbors.insert(neighbors_neighbors.begin() + insert_place, {neighbor_dist, node});
+        }
+    }
+}
+
+
+
 
 
 double measure_neighbors_accuracy(const std::vector<uint>& gt_neighbors, const std::vector<std::pair<float,uint>>& neighbors, int k) {
@@ -286,7 +397,7 @@ double measure_graph_quality(const std::vector<std::vector<uint>>& gt_graph,
         auto est_neighbors = knn_graph[x];
         for (uint i = 0; i < k; i++) {
             uint est_node = est_neighbors[i].second;
-            if (std::find(gt_neighbors.begin(), gt_neighbors.end(), est_node) != gt_neighbors.end()) {
+            if (std::find(gt_neighbors.begin()+1, gt_neighbors.end()+k+1, est_node) != gt_neighbors.end()+k+1) {
                 total_num_correct++;
             }
         }
@@ -294,4 +405,13 @@ double measure_graph_quality(const std::vector<std::vector<uint>>& gt_graph,
     double accuracy = (double)total_num_correct / (dataset_size * (size_t)k);
 
     return accuracy;
+}
+
+void queue_to_reverse_vector(std::priority_queue<std::pair<float, uint>>& pq, std::vector<std::pair<float, uint>>& vec) {
+    vec.clear();
+    while (!pq.empty()) {
+        vec.push_back(pq.top());
+        pq.pop();
+    }
+    std::reverse(vec.begin(), vec.end());
 }

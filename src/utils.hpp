@@ -9,53 +9,6 @@ typedef uint32_t uint;
 float MAX_FLOAT = std::numeric_limits<float>::max();
 uint MAX_UINT = std::numeric_limits<uint32_t>::max();
 
-void load_dataset_google_qa(const std::string& filename, float*& data_pointer, size_t& dataset_size, size_t& dimension) {
-    dataset_size = 3001496;
-    dimension = 384;
-
-    // open the file
-    std::ifstream input_file(filename, std::ios::binary);
-    if (!input_file.is_open()) {
-        throw std::runtime_error("Unable to open file: " + filename);
-    }
-
-    // Create a container for the vectors
-    data_pointer = new float[dataset_size * dimension];
-
-    // Read all the vectors
-    input_file.read(reinterpret_cast<char*>(data_pointer), dataset_size * dimension * sizeof(float));
-    input_file.close();
-    return; 
-}
-
-
-void load_gt_google_qa(const std::string& filename, std::vector<std::vector<uint>>& graph, size_t& dataset_size, size_t& k) {
-    dataset_size = 3001496;
-    k = 32;
-
-    // open the file
-    std::ifstream input_file(filename, std::ios::binary);
-    if (!input_file.is_open()) {
-        throw std::runtime_error("Unable to open file: " + filename);
-    }
-
-    // Create a container for the vectors
-    graph.resize(dataset_size, std::vector<uint>(k));
-
-    // Read all the vectors
-    std::vector<int32_t> temp_vec(k);
-    for (size_t i = 0; i < dataset_size; ++i) {
-        input_file.read(reinterpret_cast<char*>(temp_vec.data()), k * sizeof(int32_t));
-        for (size_t j = 0; j < k; ++j) {
-            graph[i][j] = static_cast<uint> (temp_vec[j]) - 1; // BECAUSE GT WAS 1-INDEXED
-        }
-    }
-    input_file.close();
-    return; 
-}
-
-
-
 /*
  * Author:  David Robert Nadeau
  * Site:    http://NadeauSoftware.com/

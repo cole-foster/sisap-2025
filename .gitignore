@@ -1,5 +1,6 @@
-run.sh
-main
 slurms/
 slurm*
 .vscode/
+run.sh
+main
+data/

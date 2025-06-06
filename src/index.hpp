@@ -4,6 +4,8 @@
 #include <vector>
 #include <fstream>
 #include <queue>
+#include <random>
+#include <atomic>
 #include <memory>
 #include <omp.h>
 
@@ -11,7 +13,7 @@
 #include "visited-list-pool.h"
 
 typedef uint32_t uint;
-class GraphBuilder {
+class Index {
 public:
     float MAX_FLOAT = std::numeric_limits<float>::max();
     uint MAX_UINT = std::numeric_limits<uint>::max();
@@ -54,7 +56,7 @@ public:
     std::atomic<size_t> metrics_distance_computations_{0};
 
     // MARK: CONSTRUCTOR
-    GraphBuilder(uint datasetSize, distances::SpaceInterface<float>* s, uint graphNeighborsTop=32, uint graphNeighborsBottom=32) {
+    Index(uint datasetSize, distances::SpaceInterface<float>* s, uint graphNeighborsTop=32, uint graphNeighborsBottom=32) {
         dataset_size_ = datasetSize;
 
         // distance function (from hnswlib)
@@ -77,15 +79,13 @@ public:
 
         // visited list initialization for beam search
         visitedListPool_ = std::unique_ptr<VisitedListPool>(new VisitedListPool(32, dataset_size_));
-        visitedListSharedPool_ = std::unique_ptr<VisitedListSharedPool>(new VisitedListSharedPool(32, dataset_size_));
-        visitedListShared_ = std::unique_ptr<VisitedListShared>(new VisitedListShared(dataset_size_));
         visitedList_ = std::unique_ptr<VisitedList>(new VisitedList(dataset_size_));
 
         // define random start nodes
         set_start_nodes(1024);
         srand(randomSeed_);
     }
-    ~GraphBuilder() {
+    ~Index() {
         if (data_ != nullptr) free(data_);
         data_ = nullptr;
     }

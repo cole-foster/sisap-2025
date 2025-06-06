@@ -6,3 +6,5 @@ main
 data/
 env/
 graphs/
+*.egg-info
+*cpython*

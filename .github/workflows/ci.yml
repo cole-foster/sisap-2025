@@ -46,6 +46,7 @@ jobs:
           conda activate myenv
           conda install matplotlib
           pip install h5py
+          pip install pybind11 setuptools
       - name: Run benchmark
         shell: bash -el {0}
         run: |

@@ -52,10 +52,11 @@ jobs:
         run: |
           conda activate myenv
           python3 task2.py
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: Results
-      #     path: | 
-      #       res.csv
-      #       result_task1.png
-      #       result_task2.png
+          python3 utils/eval.py res.csv
+          python3 utils/plot.py --task task2 res.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Results
+          path: | 
+            res.csv
+            result_task2.png

@@ -2,7 +2,7 @@
 Submission to the SISAP 2025 Indexing Challenge
 
 
-
+Need to revise workflow to upload plot2
 
 
 

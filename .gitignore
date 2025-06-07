@@ -8,3 +8,6 @@ env/
 graphs/
 *.egg-info
 *cpython*
+rebuild.sh
+.nfs*
+res*

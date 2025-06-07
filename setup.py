@@ -2,11 +2,17 @@ from setuptools import setup
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 
 ext_modules = [
-    Pybind11Extension("example", ["example.cpp"]),
+    Pybind11Extension(
+        "Submission", 
+        ["src/pybind_wrapper.cpp"],
+        include_dirs=["src"],
+        extra_compile_args=["-O3", "-fopenmp"],
+        extra_link_args=["-fopenmp"],
+    ),
 ]
 
 setup(
-    name="example",
+    name="Submission",
     version="0.0.1",
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},

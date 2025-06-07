@@ -92,10 +92,6 @@ class Graph {
     }
     void set_num_cores(uint num_cores) { num_cores_ = num_cores; }
 
-    std::vector<std::vector<uint>> get_knn(uint k) {
-        
-    }
-
     //--------------- MARK: I/O
 
     /* save the graph to disk (no distances) */
@@ -177,6 +173,14 @@ class Graph {
         }
         inputFileStream.close();
         return;
+    }
+
+    void trim_graph(uint k) {
+        for (uint index = 0; index < dataset_size_; index++) {
+            if ((*graph_with_distances_)[index].size() > k) {
+                (*graph_with_distances_)[index].resize(k);
+            }
+        }
     }
 
     //--------------- MARK: DISTANCES
@@ -287,7 +291,7 @@ class Graph {
     //================================================================================================
 
     /* initialize with a random graph */
-    int random_seed_ = 0;
+    int random_seed_ = 101;
     void init_random_graph(uint num_neighbors) {
         max_neighbors_ = num_neighbors;
         printf(" * begin random graph initialization...\n");
@@ -329,6 +333,127 @@ class Graph {
         num_neighbors_top_ = num_neighbors_top;
         max_iterations_top_ = max_iterations_top;
     }
+    void build_omap_bf(std::vector<uint>& node_samples) {
+        printf(" * creating observation map (brute force)...\n");
+        auto tStart = std::chrono::high_resolution_clock::now();
+
+        // initialize the graph
+        graph_top_.reset();
+        graph_top_ = std::make_unique<std::unordered_map<uint, std::vector<uint>>>();
+        // std::unique_ptr<std::unordered_map<uint, std::vector<std::pair<float,uint>>>> graph_top_with_distances_ 
+        //         = std::make_unique<std::unordered_map<uint, std::vector<std::pair<float,uint>>>>();
+
+        // selecting nodes for omap
+        for (uint i = 0; i < omap_size_; i++) {
+            uint node = rand() % dataset_size_;
+            node_samples.push_back(node);
+            graph_top_->emplace(node, std::vector<uint>());
+            // graph_top_with_distances_->emplace(node, std::vector<uint>());
+        }
+
+        #pragma omp parallel for num_threads(num_cores_)
+        for (uint node : node_samples) {
+            char* node_ptr = getDataByInternalId(node);
+            std::vector<uint> neighbors = node_samples;
+            fixed_hsp_test(node, neighbors, num_neighbors_top_);
+            if (neighbors.size() > num_neighbors_top_) neighbors.resize(num_neighbors_top_);
+            graph_top_->at(node) = neighbors;
+        }
+        auto tEnd = std::chrono::high_resolution_clock::now();
+        double time_omap = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+        printf(" * observation map created in %.3f seconds\n", time_omap);
+    }
+
+    // void build_omap(std::vector<uint>& node_samples) {
+    //     printf(" * creating observation map by knn graph...\n");
+    //     auto tStart = std::chrono::high_resolution_clock::now();
+
+    //     // initialize the graph
+    //     std::unordered_map<uint, std::vector<std::pair<float,uint>>> graph_top_with_distances{};
+
+    //     // selecting nodes for omap
+    //     for (uint i = 0; i < omap_size_; i++) {
+    //         uint node = rand() % dataset_size_;
+    //         node_samples.push_back(node);
+    //         graph_top_with_distances.emplace(node, std::vector<uint>());
+    //     }
+
+    //     /* get random neighbors for all nodes */
+    //     for (uint i = 0; i < omap_size_; i++) {
+    //         uint node = node_samples[i];
+    //         graph_top_with_distances.at(node).resize(num_neighbors_top_);
+    //         for (uint m = 0; m < num_neighbors_top_; m++) {
+    //             uint neighbor = rand() % omap_size_;
+    //             graph_top_with_distances[node][m] = {0.0, neighbor};
+    //         }
+    //     }
+    //     #pragma omp parallel for num_threads(num_cores_)
+    //     for (uint i = 0; i < omap_size_; i++) {
+    //         uint node = node_samples[i];
+    //         for (uint m = 0; m < num_neighbors_top_; m++) {
+    //             uint neighbor = graph_top_with_distances[node][m].second;
+    //             float dist = compute_distance(node, neighbor);
+    //             graph_top_with_distances[node][m] = {dist, neighbor};
+    //         }
+    //     }
+
+    //     /* refine the graph with beam search */
+    //     printf(" * creating graph on top layer...\n");
+    //     uint num_iterations = 3;
+    //     for (int i = 0; i < num_iterations; i++) {
+
+    //         // perform the search and update of the knn graphs
+    //         uint batch_size = 1000;
+    //         std::vector<std::vector<std::pair<float, uint>>> batch_neighbors(batch_size, std::vector<std::pair<float, uint>>(num_neighbors_top_, {HUGE_VALF, 0}));
+    //         uint batch_begin = 0;
+    //         while (batch_begin < dataset_size_) {
+    //             uint batch_end = batch_begin + batch_size;
+    //             if (batch_end > omap_size_) batch_end = omap_size_;
+
+    //             /* perform the searches in parallel */
+    //             #pragma omp parallel for num_threads(num_cores_)
+    //             for (uint qid = batch_begin; qid < batch_end; qid++) {
+    //                 uint query_node = node_samples[qid];
+    //                 char* query_ptr = getDataByInternalId(query_node);
+
+    //                 /* perform a beam search */
+    //                 uint start_node = internal_greedy_search(query_ptr, start_node_top);
+    //                 auto res = internal_beam_search(query_ptr, start_node, beam_size, num_hops);
+    //                 while (res.size() > num_neighbors) res.pop();
+
+    //                 /* save the neighbors */
+    //                 queue_to_reverse_vector(res, batch_neighbors[qid]);
+    //             }
+
+    //         /* batch update of the graph */
+    //         #pragma omp parallel for num_threads(num_cores_)
+    //                     for (uint q = batch_begin; q < batch_end; q++) {
+    //                         uint qid = q - batch_begin;
+    //                         uint query_node = random_ordering[q];
+    //                         update_graph_knn(query_node, batch_neighbors[qid]);
+    //                     }
+
+    //                     /* setup next batch */
+    //                     if (batch_count % 10 == 0) {
+    //                         printf(" %u/%u\n", batch_end, dataset_size_);
+    //                     }
+    //                     batch_begin = batch_end;
+    //                 }
+                    
+
+    //                 /* convert to other graph */
+    //                 graph_top_.reset();
+    //                 graph_top_ = std::make_unique<std::unordered_map<uint, std::vector<uint>>>();
+    //                 for (uint i = 0; i < omap_size_; i++) {
+    //                     uint node = node_samples[i];
+    //                     graph_top_->emplace(node, std::vector<uint>());
+    //                     graph_top_->at(node).resize(num_neighbors_top_);
+    //                     for (uint m = 0; m < num_neighbors_top_; m++) {
+    //                         graph_top_->at(node)[m] = graph_top_with_distances[node][m].second;
+    //                     }
+    //                 }
+    //             }
+
 
     /* Build the kNN Graph */
     void iterate_knn_refinement(uint num_neighbors, uint num_hops = 100, int random_seed = 0) {
@@ -338,32 +463,17 @@ class Graph {
         uint beam_size = max_neighbors_;
 
         /* initialize the random seed */
-        if (random_seed > 0 && random_seed != random_seed_) {
+        if (random_seed >= 0 && random_seed != random_seed_) {
             random_seed_ = random_seed;
         } else {
             random_seed_ = time(nullptr);
-            srand(random_seed_);
         }
+        srand(random_seed_);
 
         /* create the observation map */
-        printf(" * creating observation map...\n");
-        graph_top_.reset();
-        graph_top_ = std::make_unique<std::unordered_map<uint, std::vector<uint>>>();
         std::vector<uint> node_samples{};
-        for (uint i = 0; i < omap_size_; i++) {
-            uint node = rand() % dataset_size_;
-            node_samples.push_back(node);
-            graph_top_->emplace(node, std::vector<uint>());
-        }
-#pragma omp parallel for num_threads(num_cores_)
-        for (uint node : node_samples) {
-            char* node_ptr = getDataByInternalId(node);
-            std::vector<uint> neighbors = node_samples;
-            fixed_hsp_test(node, neighbors, num_neighbors_top_);
-            if (neighbors.size() > num_neighbors_top_) neighbors.resize(num_neighbors_top_);
-            graph_top_->at(node) = neighbors;
-        }
-        uint start_node_top = node_samples[rand() % omap_size_];
+        build_omap_bf(node_samples);
+        uint start_node_top = node_samples[0];
 
         /* create a random ordering for the nodes, to add to the dataset */
         srand(3 * random_seed_ + 1);
@@ -383,8 +493,8 @@ class Graph {
             if (batch_end > dataset_size_) batch_end = dataset_size_;
             batch_count++;
 
-/* perform the searches in parallel */
-#pragma omp parallel for num_threads(num_cores_)
+            /* perform the searches in parallel */
+            #pragma omp parallel for num_threads(num_cores_)
             for (uint q = batch_begin; q < batch_end; q++) {
                 uint qid = q - batch_begin;
                 uint query_node = random_ordering[q];

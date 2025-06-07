@@ -29,36 +29,83 @@ def run(dataset, k=15):
     # get the dataset
     fn, _ = get_fn(dataset, task)
     f = h5py.File(fn)
-    data = np.array(DATASETS[dataset][task]['data'](f)).astype(np.float32)
-    N,D = data.shape
+    data_disk = DATASETS[dataset][task]['data'](f)
+    N,D = data_disk.shape
 
-    # initialize index
-    time_start = time.time()
-    index = Submission.Graph(N, D)
-    index.add_items(data)
-    elapsed_build = time.time() - time_start
+    # parameters for different datasets
+    if (dataset == 'ccnews-small'):
+        arr_num_neighbors = [48]
+        arr_num_hops = [48]
+        arr_omap_size = [4000]
+        arr_num_iterations = [2]
+    elif (dataset == 'gooaq'):
+        arr_num_neighbors = [64]
+        arr_num_hops = [64]
+        arr_omap_size = [4000]
+        arr_num_iterations = [1]
+    
+    # do this many times
+    path_list = []
+    for i in range(len(arr_num_neighbors)):
+        num_neighbors = arr_num_neighbors[i]
+        num_hops = arr_num_hops[i]
+        omap_size = arr_omap_size[i]
+        num_iterations = arr_num_iterations[i]
+        print(f"Running with num_neighbors={num_neighbors}, num_hops={num_hops}, omap_size={omap_size}, num_iterations={num_iterations}")
+        identifier = f"index=({index_identifier}),query=(M={num_neighbors},H={num_hops},O={omap_size},I={num_iterations})"
+
+        # initialize index and add dataset items in batches
+        time_start = time.time()
+        index = Submission.Task2(N, D)
+        start = 0
+        while start < N:
+            end = min(start + 200000, N)
+            subset = np.array(data_disk[start:end]).astype(np.float32)
+            index.add_items(subset)
+            start = end
+        elapsed_build = time.time() - time_start
+
+        # create knn graph
+        time_start = time.time()
+        neighbors,distances = index.create_knn(k, num_neighbors, num_hops, omap_size, num_iterations)
+        elapsed_search = time.time() - time_start
+        print(f"kNN Graph construction in {elapsed_search}s.")
+        neighbors = neighbors + 1 # FAISS is 0-indexed, groundtruth is 1-indexed
+        store_results(os.path.join("results/", dataset, task, f"{identifier}.h5"), index_identifier, dataset, task, distances, neighbors, elapsed_build, elapsed_search, identifier)
+        path_list.append(os.path.join("results/", dataset, task, f"{identifier}.h5"))
+
+        # explicitly delete for next iteration just in case
+        del index
+
+    # done
     f.close()
 
-    # create knn graph
-    time_start = time.time()
-    index.create_knn()
-    neighbors,distances = index.return_knn(k)
-    elapsed_search = time.time() - time_start
-    print(f"kNN Graph construction in {elapsed_search}s.")
-    neighbors = neighbors + 1 # FAISS is 0-indexed, groundtruth is 1-indexed
-    identifier = f"index=({index_identifier})"
-    store_results(os.path.join("results/", dataset, task, f"{identifier}.h5"), index_identifier, dataset, task, distances, neighbors, elapsed_build, elapsed_search, identifier)
+    # get gt
+    _, gt_fn = get_fn(dataset, task)
+    f = h5py.File(gt_fn)
+    gt_I = np.array(DATASETS[dataset][task]['gt_I'](f))
+    f.close()
+
+    # measure recall
+    for res_path in path_list:
+        print(f"Evaluating {res_path}...")
+        f = h5py.File(res_path, 'r')
+        print(f.keys())
+        I = np.array(f['knns'])
+        f.close()
+        num_queries = I.shape[0]
+
+        recall = 0
+        for i in range(num_queries):
+            est_neighbors = I[i, :k]
+            gt_neighbors = gt_I[i, 1:k+1]
+            recall += len(set(est_neighbors) & set(gt_neighbors))
+        recall /= (num_queries * k)
+        print(f"Recall for {res_path}: {recall:.4f}")
 
 
 
-
-
-
-    # now create the graph
-
-
-
-
+ 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

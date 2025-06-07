@@ -11,3 +11,5 @@ graphs/
 rebuild.sh
 .nfs*
 res*
+*__pycache__*
+*.pyc

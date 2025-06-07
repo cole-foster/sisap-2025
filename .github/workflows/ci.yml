@@ -47,6 +47,7 @@ jobs:
           conda install matplotlib
           pip install h5py
           pip install pybind11 setuptools
+          pip install .
       - name: Run benchmark
         shell: bash -el {0}
         run: |

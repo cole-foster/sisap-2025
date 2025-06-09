@@ -2,10 +2,6 @@
 Submission to the SISAP 2025 Indexing Challenge
 
 
-Need to revise workflow to upload plot2
-
-
-
 ### Python Bindings
 The code is written in C++ and has bindings to interact with Python via Pybind11. To install the python bindings, run the command `pip install .` in the base directory. 
 

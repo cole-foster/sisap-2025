@@ -14,7 +14,7 @@
 
 typedef uint32_t uint;
 class Index {
-public:
+  public:
     float MAX_FLOAT = std::numeric_limits<float>::max();
     uint MAX_UINT = std::numeric_limits<uint>::max();
 

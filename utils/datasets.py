@@ -18,7 +18,7 @@ def prepare(dataset, task):
     fn, gt_fn = get_fn(dataset, task)
 
     download(url, fn)
-    download(gt_url, gt_fn)
+    #(gt_url, gt_fn)
 
 def get_query_count(dataset, task):
     fn, _ = get_fn(dataset, task) 
@@ -31,7 +31,7 @@ DATASETS = {
     'ccnews-small': {
         'task1': {
             'url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/benchmark-dev-ccnews-fp16.h5?download=true',
-            'queries': lambda x: x['itest']['queries'],
+            'queries': lambda x: x['otest']['queries'],
             'data': lambda x: x['train'],
             'gt_url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/benchmark-dev-ccnews-fp16.h5?download=true',
             'gt_I': lambda x: x['itest']['knns'],
@@ -54,6 +54,16 @@ DATASETS = {
             'gt_url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/allknn-benchmark-dev-gooaq.h5?download=true',
             'gt_I': lambda x: x['knns'],
             'k': 15,
+        }
+    },
+    'pubmed': {
+        'task1': {
+            'url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/benchmark-dev-pubmed23.h5?download=true',
+            'queries': lambda x: x['otest']['queries'],
+            'data': lambda x: x['train'],
+            'gt_url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/allknn-benchmark-dev-gooaq.h5?download=true',
+            'gt_I': lambda x: x['otest']['knns'],
+            'k': 30,
         }
     }
 }

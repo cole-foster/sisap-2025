@@ -10,9 +10,9 @@
 #include <queue>
 #include <vector>
 
-#include "../../src/distances.h"
-#include "../../src/graph.hpp"
-#include "utils.hpp"
+#include "src/distances.h"
+#include "src/knn.hpp"
+// #include "tmp/task2/utils.hpp"
 
 /* dataset */
 size_t dataset_size, dimension, gt_k;
@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     uint k = 15;
 
     uint num_neighbors = 48;
-    uint num_hops = 32;
+    uint num_hops = 48;
     uint omap_size = 4000;
     uint omap_neighbors = 32;
     if (argc > 3) {
@@ -62,10 +62,16 @@ int main(int argc, char** argv) {
 
     /* Initialize Index */
     space = new distances::InnerProductSpace(dimension);
-    Graph* alg = new Graph(dataset_size, dimension, space);
-    alg->load_dataset_float(data_pointer);
-    alg->set_num_cores(num_cores);
+    KNN* alg = new KNN(dataset_size, dimension, space);
+    // alg->load_dataset_float(data_pointer);
+    // alg->set_num_cores(num_cores);
 
+    printf("Adding dataset elements\n");
+    alg->init_dataset();
+    #pragma omp parallel for
+    for (uint i = 0; i < dataset_size; i++) {
+        alg->add_point(data_pointer + i * dimension, i);
+    }
     /* build the knn graph */
     printf("Begin refinement-based knn graph construction\n");
     auto tStart = std::chrono::high_resolution_clock::now();
@@ -80,11 +86,11 @@ int main(int argc, char** argv) {
         double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
 
         // measure memory
-        double peak_memory = (double)getPeakRSS() / 1024 / 1024;        // in MB
-        double current_memory = (double)getCurrentRSS() / 1024 / 1024;  // in MB
+        double peak_memory = 0; // (double)getPeakRSS() / 1024 / 1024;        // in MB
+        double current_memory = 0; //(double)getCurrentRSS() / 1024 / 1024;  // in MB
 
         // measure accuracy
-        double accuracy = measure_graph_quality(gt_graph, *(alg->graph_with_distances_), k);
+        double accuracy = measure_graph_quality(gt_graph, *(alg->graph_), k);
 
         // print
         printf("Iteration, time, accuracy, current mem, peak mem\n");

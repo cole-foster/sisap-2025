@@ -13,3 +13,6 @@ rebuild.sh
 res*
 *__pycache__*
 *.pyc
+m_*
+
+tmp/

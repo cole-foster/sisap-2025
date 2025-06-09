@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cmath>
 #include <queue>
 #include <unordered_set>
@@ -10,7 +11,19 @@ class UniquePriorityQueue {
 public:
     std::priority_queue<std::pair<float,uint>> pq;         // Priority queue to store elements
     std::unordered_set<uint> seen;        // Set to track unique elements
-    std::pair<float,uint> best = std::make_pair<float,uint>(HUGE_VALF,0);
+
+    UniquePriorityQueue() {};
+
+
+    UniquePriorityQueue(std::priority_queue<std::pair<float,uint>> existing_pq) {
+        pq = existing_pq; // storing a copy
+        
+        // now add all to the seen set
+        while (!existing_pq.empty()) {
+            seen.insert(existing_pq.top().second);
+            existing_pq.pop();
+        }
+    }
 
     // Insert element if not a duplicate
     bool push(std::pair<float,uint> pair) {
@@ -18,9 +31,6 @@ public:
         if (seen.find(pair.second) == seen.end()) {
             pq.emplace(pair);
             seen.insert(pair.second);
-            if (pair.first < best.first) {
-                best = pair;
-            }
             return true; // Successfully added
         }
         return false; // Duplicate found, not added

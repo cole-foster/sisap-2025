@@ -34,7 +34,7 @@ DATASETS = {
             'queries': lambda x: x['otest']['queries'],
             'data': lambda x: x['train'],
             'gt_url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/benchmark-dev-ccnews-fp16.h5?download=true',
-            'gt_I': lambda x: x['itest']['knns'],
+            'gt_I': lambda x: x['otest']['knns'],
             'k': 30,
         },
         'task2': {

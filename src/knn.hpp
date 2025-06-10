@@ -351,7 +351,7 @@ class KNN {
 
         /* add to the index */
         for (uint node : top_layer_nodes_) {
-            char* node_ptr = getDataByInternalId(node);
+            float* node_ptr = reinterpret_cast<float*> (getDataByInternalId(node));
             top_layer_graph_->add_point(node_ptr, node);
         }
 

@@ -40,7 +40,7 @@ def run(dataset, k=30):
     print("Begin constructing HNSW...")
     time_start = time.time()
     p = hnswlib.Index(space='ip', dim=D)  # 'ip' is for inner product
-    p.init_index(max_elements=N, ef_construction=200, M=64)
+    p.init_index(max_elements=N, ef_construction=200, M=32)
     p.add_items(data)
     time_end = time.time()
     time_construction = time_end - time_start

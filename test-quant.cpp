@@ -31,7 +31,59 @@ float compute_distance(float* index1_ptr, float* index2_ptr) {
     return distFunc_(index1_ptr, index2_ptr, distFuncParam_);
 }
 
+void pack_4bit_aligned(const std::vector<uint8_t>& values, uint8_t* out_bytes) {
+    size_t num_bytes = (values.size() + 1) / 2;
+    std::fill(out_bytes, out_bytes + num_bytes, 0);  // zero out
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        uint8_t val = values[i] & 0x0F;
+        if (i % 2 == 0)
+            out_bytes[i / 2] |= val;
+        else
+            out_bytes[i / 2] |= val << 4;
+    }
+}
+
 // Packs a vector of integers (each with num_bits bits) into a byte array
+// void pack_bits(const std::vector<uint8_t>& values, uint num_bits, uint8_t* out_bytes) {
+//     std::fill(out_bytes, out_bytes + ((values.size() * num_bits + 7) / 8), 0); // zero-out
+
+//     size_t bit_offset = 0;
+//     for (size_t i = 0; i < values.size(); ++i) {
+//         uint8_t value = values[i] & ((1 << num_bits) - 1); // mask to num_bits
+//         size_t byte_idx = bit_offset / 8;
+//         size_t bit_idx  = bit_offset % 8;
+
+//         out_bytes[byte_idx] |= value << bit_idx;
+
+//         if (bit_idx + num_bits > 8) {
+//             out_bytes[byte_idx + 1] |= value >> (8 - bit_idx);
+//         }
+
+//         bit_offset += num_bits;
+//     }
+// }
+
+
+// // Unpacks a byte array into a vector of integers (each with num_bits bits)
+// void unpack_bits(const uint8_t* in_bytes, size_t num_values, uint num_bits, std::vector<uint8_t>& out_values) {
+//     out_values.resize(num_values);
+//     size_t bit_offset = 0;
+
+//     for (size_t i = 0; i < num_values; ++i) {
+//         size_t byte_idx = bit_offset / 8;
+//         size_t bit_idx  = bit_offset % 8;
+
+//         uint16_t word = in_bytes[byte_idx];
+//         if (bit_idx + num_bits > 8) {
+//             word |= static_cast<uint16_t>(in_bytes[byte_idx + 1]) << 8;
+//         }
+
+//         out_values[i] = (word >> bit_idx) & ((1 << num_bits) - 1);
+//         bit_offset += num_bits;
+//     }
+// }
+
 void pack_bits(const std::vector<uint8_t>& values, uint num_bits, uint8_t* out_bytes) {
     std::fill(out_bytes, out_bytes + ((values.size() * num_bits + 7) / 8), 0); // zero-out
 
@@ -41,17 +93,20 @@ void pack_bits(const std::vector<uint8_t>& values, uint num_bits, uint8_t* out_b
         size_t byte_idx = bit_offset / 8;
         size_t bit_idx  = bit_offset % 8;
 
-        out_bytes[byte_idx] |= value << bit_idx;
+        if (num_bits == 8 && bit_idx == 0) {
+            // Fast path: write whole byte
+            out_bytes[byte_idx] = value;
+        } else {
+            out_bytes[byte_idx] |= value << bit_idx;
 
-        if (bit_idx + num_bits > 8) {
-            out_bytes[byte_idx + 1] |= value >> (8 - bit_idx);
+            if (bit_idx + num_bits > 8) {
+                out_bytes[byte_idx + 1] |= value >> (8 - bit_idx);
+            }
         }
 
         bit_offset += num_bits;
     }
 }
-
-// Unpacks a byte array into a vector of integers (each with num_bits bits)
 void unpack_bits(const uint8_t* in_bytes, size_t num_values, uint num_bits, std::vector<uint8_t>& out_values) {
     out_values.resize(num_values);
     size_t bit_offset = 0;
@@ -60,18 +115,69 @@ void unpack_bits(const uint8_t* in_bytes, size_t num_values, uint num_bits, std:
         size_t byte_idx = bit_offset / 8;
         size_t bit_idx  = bit_offset % 8;
 
-        uint16_t word = in_bytes[byte_idx];
-        if (bit_idx + num_bits > 8) {
-            word |= static_cast<uint16_t>(in_bytes[byte_idx + 1]) << 8;
+        if (num_bits == 8 && bit_idx == 0) {
+            // Fast path: read whole byte
+            out_values[i] = in_bytes[byte_idx];
+        } else {
+            uint16_t word = in_bytes[byte_idx];
+            if (bit_idx + num_bits > 8) {
+                word |= static_cast<uint16_t>(in_bytes[byte_idx + 1]) << 8;
+            }
+            out_values[i] = (word >> bit_idx) & ((1 << num_bits) - 1);
         }
 
-        out_values[i] = (word >> bit_idx) & ((1 << num_bits) - 1);
         bit_offset += num_bits;
     }
 }
 
 
-inline void unpack_4bit_nibbles_avx2(const uint8_t* in_bytes, size_t num_values, std::vector<uint8_t>& out_values) {
+void unpack_bits_4bit_scalar(std::vector<uint8_t>& out_values, uint num_bits, const uint8_t* in_bytes, size_t num_values) {
+    for (size_t i = 0; i < num_values / 2; ++i) {
+        uint8_t byte = in_bytes[i];
+        out_values[2 * i]     = byte & 0x0F;
+        out_values[2 * i + 1] = byte >> 4;
+    }
+}
+
+
+// inline void unpack_bits_4bit_simd_avx2(std::vector<uint8_t>& out_values, uint num_bits, const uint8_t* in_bytes, size_t num_values) {
+//     out_values.resize(num_values);
+//     uint8_t* out_ptr = out_values.data();
+
+//     size_t num_bytes = num_values / 2;
+//     size_t i = 0;
+
+//     const __m256i mask_0F = _mm256_set1_epi8(0x0F);
+
+//     for (; i + 32 <= num_bytes; i += 32) {
+//         __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(in_bytes + i));
+
+//         // Extract lower nibbles
+//         __m256i lo = _mm256_and_si256(v, mask_0F);
+
+//         // To extract upper nibbles:
+//         // Promote to 16-bit lanes, shift right by 4, then narrow back to 8-bit
+//         __m256i v_16 = _mm256_and_si256(_mm256_srli_epi16(v, 4), mask_0F);
+//         __m256i hi = v_16;
+
+//         // Interleave lo and hi nibbles into final 64-byte output
+//         __m256i interleaved_lo = _mm256_unpacklo_epi8(lo, hi); // 32 unpacked
+//         __m256i interleaved_hi = _mm256_unpackhi_epi8(lo, hi); // 32 unpacked
+
+//         size_t out_idx = 2 * i;
+//         _mm256_storeu_si256(reinterpret_cast<__m256i*>(out_ptr + out_idx), interleaved_lo);
+//         _mm256_storeu_si256(reinterpret_cast<__m256i*>(out_ptr + out_idx + 32), interleaved_hi);
+//     }
+
+//     // Fallback scalar for remainder
+//     for (; i < num_bytes; ++i) {
+//         uint8_t byte = in_bytes[i];
+//         out_ptr[2 * i]     = byte & 0x0F;
+//         out_ptr[2 * i + 1] = byte >> 4;
+//     }
+// }
+
+inline void unpack_4bit_aligned_avx2(const uint8_t* in_bytes, size_t num_values, std::vector<uint8_t>& out_values) {
     out_values.resize(num_values);
     uint8_t* out_ptr = out_values.data();
 
@@ -80,24 +186,12 @@ inline void unpack_4bit_nibbles_avx2(const uint8_t* in_bytes, size_t num_values,
 
     const __m256i mask_0F = _mm256_set1_epi8(0x0F);
 
-    // Process 32 bytes → 64 unpacked 4-bit values
+    // Process 32 input bytes → 64 output nibbles
     for (; i + 32 <= num_pairs; i += 32) {
-        // Load 32 bytes (each has two 4-bit values)
         __m256i packed = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(in_bytes + i));
-
-        // Extract low nibbles
         __m256i lo = _mm256_and_si256(packed, mask_0F);
+        __m256i hi = _mm256_and_si256(_mm256_srli_epi16(packed, 4), mask_0F);
 
-        // Extract high nibbles: use 16-bit shift trick
-        __m256i unpacked_lo = _mm256_unpacklo_epi8(packed, _mm256_setzero_si256());
-        __m256i unpacked_hi = _mm256_unpackhi_epi8(packed, _mm256_setzero_si256());
-
-        __m256i hi_lo = _mm256_srli_epi16(unpacked_lo, 4);
-        __m256i hi_hi = _mm256_srli_epi16(unpacked_hi, 4);
-
-        __m256i hi = _mm256_packus_epi16(hi_lo, hi_hi);
-
-        // Interleave low/high nibbles
         __m256i interleaved_lo = _mm256_unpacklo_epi8(lo, hi);
         __m256i interleaved_hi = _mm256_unpackhi_epi8(lo, hi);
 
@@ -112,15 +206,25 @@ inline void unpack_4bit_nibbles_avx2(const uint8_t* in_bytes, size_t num_values,
         out_ptr[2 * i + 1] = byte >> 4;
     }
 
-    // If odd number of values
+    // Odd value fallback
     if (num_values % 2 != 0) {
         out_ptr[num_values - 1] = in_bytes[num_pairs] & 0x0F;
     }
 }
 
+
+// Computes the Hamming distance between two uint8_t arrays of length D
+int hamming_distance(const uint8_t* a, const uint8_t* b, size_t D) {
+    int dist = 0;
+    for (size_t i = 0; i < D; ++i) {
+        dist += __builtin_popcount(a[i] ^ b[i]);
+    }
+    return dist;
+}
+
 // MARK: MAIN
 int main(int argc, char** argv) {
-    uint num_bits = 7;
+    uint num_bits = 4;
     uint bytes_per_vector_ = (uint) (num_bits*384 + 7) / 8; // number of bytes per vector
 
     std::vector<uint8_t> input = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
@@ -128,8 +232,8 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> packed(packed_size);
     std::vector<uint8_t> unpacked;
 
-    // pack_4bit_aligned(input, packed.data());
-    // unpack_4bit_aligned_avx2(packed.data(), input.size(), unpacked);
+    pack_4bit_aligned(input, packed.data());
+    unpack_4bit_aligned_avx2(packed.data(), input.size(), unpacked);
 
     for (size_t i = 0; i < input.size(); ++i) {
         printf("%d ", unpacked[i]);
@@ -195,8 +299,8 @@ int main(int argc, char** argv) {
         }
         // pack_bits(quantized_vector, num_bits, quantized_dataset+i*bytes_per_vector);
         // pack_4bit_aligned(quantized_vector, num_bits, quantized_dataset+i*bytes_per_vector);
-        pack_bits(quantized_vector, num_bits, quantized_dataset+i*bytes_per_vector);
-        // pack_4bit_nibbles(quantized_vector, quantized_dataset+i*bytes_per_vector);
+        // pack_bits(quantized_vector, num_bits, quantized_dataset+i*bytes_per_vector);
+        pack_4bit_aligned(quantized_vector, quantized_dataset+i*bytes_per_vector);
     }
 
 
@@ -209,9 +313,8 @@ int main(int argc, char** argv) {
         // unpack_bits(quantized_vector, num_bits, quantized_dataset+i*bytes_per_vector, dimension);
         // unpack_bits_4bit_simd_avx2(quantized_vector, num_bits, quantized_dataset+i*bytes_per_vector, dimension);
         // unpack_bits_4bit_simd_avx2(quantized_vector, num_bits, , dimension);
-        unpack_bits(quantized_dataset+i*bytes_per_vector, dimension, num_bits, quantized_vector);
-        // unpack_4bit_aligned_avx2(quantized_dataset+i*bytes_per_vector, dimension, quantized_vector);
-        // unpack_4bit_nibbles_avx2(quantized_dataset+i*bytes_per_vector, dimension, quantized_vector);
+        // unpack_bits(quantized_dataset+i*bytes_per_vector, dimension, num_bits, quantized_vector);
+        unpack_4bit_aligned_avx2(quantized_dataset+i*bytes_per_vector, dimension, quantized_vector);
         for (size_t d = 0; d < dimension; d++) {
             float quantized_value = quantized_vector[d];
             float lval = lower_bounds[d];

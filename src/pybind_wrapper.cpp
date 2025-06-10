@@ -55,9 +55,8 @@ class Task1 {
             alg_ = new Graph(dataset_size_, dimension_, num_neighbors_, space_);
         }
         element_count_ = 0;
-        num_cores_ = omp_get_num_procs();
-        alg_->set_num_cores(num_cores_);
-        alg_->init_random_graph();
+        // num_cores_ = omp_get_num_procs();
+        // alg_->set_num_cores(num_cores_);
         alg_->verbose_ = true;  // enable verbose output
     }
     ~Task1() {
@@ -88,9 +87,7 @@ class Task1 {
         get_input_array_shapes(buffer, &num_rows, &num_cols);
         if (num_cols != dimension_) throw std::runtime_error("Wrong dimensionality of the vectors");
         {
-            py::gil_scoped_release l;
             uint start_id = element_count_;
-            #pragma omp parallel for
             for (uint id = 0; id < num_rows; id++) {
                 uint element_id = start_id + id;
                 alg_->add_point((float*)items.data(id), element_id);
@@ -101,9 +98,13 @@ class Task1 {
 
     /* perform iterative construction */
     void build(uint num_candidates, uint num_hops = 100, uint num_iterations = 1) {
+        alg_->init_random_graph();
         for (uint i = 0; i < num_iterations; i++) {
             printf(" * iteration %u/%u\n", i + 1, num_iterations);
+            alg_->init_top_layer_graph(4000, 32, 1);
             alg_->graph_refinement_iteration(num_candidates, num_hops);
+            alg_->trim_graph_hsp();  // trim the graph to keep only the top 10% of neighbors
+            alg_->print_graph_stats();
         }
     }
 
@@ -204,9 +205,8 @@ class Task2 {
         get_input_array_shapes(buffer, &num_rows, &num_cols);
         if (num_cols != dimension_) throw std::runtime_error("Wrong dimensionality of the vectors");
         {
-            py::gil_scoped_release l;
+            // py::gil_scoped_release l;
             uint start_id = element_count_;
-#pragma omp parallel for num_threads(num_cores_)
             for (uint id = 0; id < num_rows; id++) {
                 uint element_id = start_id + id;
                 alg_->add_point((float*)items.data(id), element_id);
@@ -238,7 +238,7 @@ class Task2 {
         float* distances_ptr = new float[dataset_size_ * k];
         {
             py::gil_scoped_release l;
-#pragma omp parallel for
+            #pragma omp parallel for
             for (uint index = 0; index < dataset_size_; index++) {
                 const auto& edges = (*alg_->graph_)[index];
                 for (uint m = 0; m < k; m++) {

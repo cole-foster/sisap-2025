@@ -31,13 +31,12 @@ def run(dataset, k=30):
     f = h5py.File(fn)
     data_disk = DATASETS[dataset][task]['data'](f)
     queries = np.array(DATASETS[dataset][task]['queries'](f)).astype(np.float32)
-    gt_knn = np.array(DATASETS[dataset][task]['gt_I'](f)).astype(np.uint32)
+    # gt_knn = np.array(DATASETS[dataset][task]['gt_I'](f)).astype(np.uint32)
     N,D = data_disk.shape
     num_queries, _ = queries.shape
     
-
     # initialize index and add dataset items in batches
-    num_bits = 0
+    num_bits = 4
     num_neighbors = 64
     time_start = time.time()
     index = Task1(N, D, num_neighbors, num_bits)
@@ -59,32 +58,30 @@ def run(dataset, k=30):
         start = end
 
     ''' perform the graph construction '''
-    num_candidates = 200
-    index.build(num_candidates, 100, 2)
+    num_candidates = 64
+    num_hops = 32
+    num_iterations = 1
+    index.build(num_candidates, num_hops, num_iterations)
     elapsed_build = time.time() - time_start
     print(f"Time taken to build index: {elapsed_build:.3f} seconds")
 
-    for beam_size in [30, 35, 40, 45, 50, 60, 70, 80, 90]:
+    for beam_size in [30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 200]:
+        identifier = f"index=({index_identifier}),query=(b={beam_size})"
 
         print(f"Querying with beam size: {beam_size}")
         time_start = time.time()
-        neighbors,_ = index.search(queries, k=k, beam_size=beam_size)
+        neighbors,distances = index.search(queries, k=k, beam_size=beam_size)
         time_end = time.time()
         elapsed_query = time_end - time_start
         throughput = num_queries / elapsed_query
+        print(f"Time taken to query: {elapsed_query:.3f} seconds, throughput: {throughput:.2f} queries/sec")
 
         # convert to 0-indexing
         neighbors += 1
 
-        # measure recall
-        recall = 0
-        for i in range(num_queries):
-            est_neighbors = neighbors[i, :k]
-            gt_neighbors = gt_knn[i, :k]
-            recall += len(set(est_neighbors) & set(gt_neighbors))
-        recall /= (num_queries * k)
-        print(f" * beam_size={beam_size}, recall={recall:.4f}, throughput={throughput:.2f} queries/sec")
-
+        # create knn grap
+        neighbors = neighbors + 1 # FAISS is 0-indexed, groundtruth is 1-indexed
+        store_results(os.path.join("results/", dataset, task, f"{identifier}.h5"), index_identifier, dataset, task, distances, neighbors, elapsed_build, elapsed_search, identifier)
 
     print("done!")
     f.close()

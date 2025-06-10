@@ -39,10 +39,10 @@ def run(dataset, k=15):
         arr_omap_size = [4000]
         arr_num_iterations = [2]
     elif (dataset == 'gooaq'):
-        arr_num_neighbors = [64]
-        arr_num_hops = [64]
-        arr_omap_size = [4000]
-        arr_num_iterations = [1]
+        arr_num_neighbors = [48]
+        arr_num_hops = [48]
+        arr_omap_size = [16000]
+        arr_num_iterations = [2]
     
     # do this many times
     path_list = []

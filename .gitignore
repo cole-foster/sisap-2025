@@ -16,3 +16,6 @@ res*
 m_*
 
 tmp/
+*.bin
+*.sh
+t_*

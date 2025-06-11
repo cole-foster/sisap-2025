@@ -38,16 +38,16 @@ def run(dataset, k=30, flag_test=False):
         num_nodes_top = 100000
         num_iterations = 1
     elif (dataset == 'pubmed'):
-        num_neighbors = 36
+        num_neighbors = 32
         num_candidates = 48
         num_hops = 64
-        num_nodes_top = 1000000
+        num_nodes_top = 400000
         num_iterations = 1
     index_identifier = "BrownCICESE"
 
     
     # initialize index and add dataset items in batches
-    num_bits = 4
+    num_bits = 8
     time_start = time.time()
     index = Task1(N, D, num_neighbors, num_bits)
 

@@ -22,48 +22,6 @@
 #include "unique-priority-queue.hpp"
 #include "visited-list-pool.h"
 
-#define NUM_BITS 4
-
-// // Packs a vector of integers (each with num_bits bits) into a byte array
-// inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, uint num_bits, uint dimension) {
-//     memset(out_bytes, 0, dimension*num_bits/8);
-//     size_t bit_offset = 0;
-//     for (size_t d = 0; d < dimension; ++d) {
-//         uint8_t value = values[d] & ((1 << num_bits) - 1); // mask to num_bits
-//         size_t byte_idx = bit_offset / 8;
-//         size_t bit_idx = bit_offset % 8;
-
-//         // Write the lower bits of value into the current byte
-//         out_bytes[byte_idx] |= value << bit_idx;
-
-//         // If value spans two bytes, write the upper bits into the next byte
-//         if (bit_idx + num_bits > 8) {
-//             out_bytes[byte_idx + 1] |= value >> (8 - bit_idx);
-//         }
-
-//         bit_offset += num_bits;
-//     }
-// }
-
-// // Unpacks a byte array into a vector of integers (each with num_bits bits)
-// inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, uint dimension) {
-//     out_values.resize(dimension);
-//     size_t bit_offset = 0;
-//     for (size_t d = 0; d < dimension; ++d) {
-//         size_t byte_idx = bit_offset / 8;
-//         size_t bit_idx = bit_offset % 8;
-
-//         // Read the bits for this value
-//         uint16_t val = in_bytes[byte_idx] >> bit_idx;
-//         if (bit_idx + num_bits > 8) {
-//             // Value spans two bytes
-//             val |= (uint16_t(in_bytes[byte_idx + 1]) << (8 - bit_idx));
-//         }
-//         out_values[d] = uint8_t(val & ((1 << num_bits) - 1));
-//         bit_offset += num_bits;
-//     }
-// }
-
 // Packs a vector of integers (each with num_bits bits) into a byte array
 inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, uint num_bits) {
     std::fill(out_bytes, out_bytes + ((values.size() * num_bits + 7) / 8), 0);  // zero-out
@@ -84,29 +42,32 @@ inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, ui
     }
 }
 
+inline void pack_bits_8(const std::vector<uint8_t>& values, uint8_t* out_bytes, uint num_bits) {
+    memcpy(out_bytes, values.data(), values.size() * sizeof(uint8_t));
+}
+
 // Unpacks a byte array into a vector of integers (each with num_bits bits)
-// inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, uint dimension) {
-// inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values)
-// {
-//     out_values.resize(num_values);
-//     size_t bit_offset = 0;
+inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values)
+{
+    out_values.resize(num_values);
+    size_t bit_offset = 0;
 
-//     for (size_t i = 0; i < num_values; ++i) {
-//         size_t byte_idx = bit_offset / 8;
-//         size_t bit_idx  = bit_offset % 8;
+    for (size_t i = 0; i < num_values; ++i) {
+        size_t byte_idx = bit_offset / 8;
+        size_t bit_idx  = bit_offset % 8;
 
-//         uint16_t word = in_bytes[byte_idx];
-//         if (bit_idx + num_bits > 8) {
-//             word |= static_cast<uint16_t>(in_bytes[byte_idx + 1]) << 8;
-//         }
+        uint16_t word = in_bytes[byte_idx];
+        if (bit_idx + num_bits > 8) {
+            word |= static_cast<uint16_t>(in_bytes[byte_idx + 1]) << 8;
+        }
 
-//         out_values[i] = (word >> bit_idx) & ((1 << num_bits) - 1);
-//         bit_offset += num_bits;
-//     }
-// }
+        out_values[i] = (word >> bit_idx) & ((1 << num_bits) - 1);
+        bit_offset += num_bits;
+    }
+}
 
 /* unpacks 4bit only, faster */
-inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values)
+inline void unpack_bits_4(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values)
 {
     out_values.resize(num_values);
     size_t i = 0, j = 0;
@@ -119,6 +80,11 @@ inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_byte
     if (i < num_values) {
         out_values[i] = in_bytes[j] & 0x0F;
     }
+}
+
+inline void unpack_bits_8(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values) {
+    out_values.resize(num_values);
+    memcpy(out_values.data(), in_bytes, num_values);
 }
 
 
@@ -164,7 +130,7 @@ class Graph {
     /* quantization */
     bool quantization_ = false;
     bool is_trained = false;
-    const uint num_bits_ = NUM_BITS;    // number of bits per dimension
+    uint num_bits_;    // number of bits per dimension
     uint num_levels_ = 0;  // number of quantization levels
     uint bytes_per_vector_ = 0;
     std::vector<float> quant_lower_bounds_;
@@ -217,7 +183,7 @@ class Graph {
 
         /* quantization */
         quantization_ = true;
-        // num_bits_ = num_bits; 4
+        num_bits_ = num_bits;
         num_levels_ = (1u << num_bits_);                       // number of quantization levels
         bytes_per_vector_ = (num_bits_ * dimension_ + 7) / 8;  // number of bytes per vector
         printf("Quantization: %u bits per dimension, %u levels, %u bytes per vector\n", num_bits,
@@ -323,7 +289,6 @@ class Graph {
         // }
 
 
-
         // NEED TO ACCOUNT FOR ZERO
         quant_deltas_.resize(dimension_);
         for (uint d = 0; d < dimension_; d++) {
@@ -356,8 +321,11 @@ class Graph {
             if (quantized_idx >= num_levels_) quantized_idx = num_levels_ - 1;
             quantized_vector[d] = quantized_idx;
         }
-        pack_bits(quantized_vector, out_ptr, num_bits_);
-        // pack_4bit(quantized_vector, out_ptr);
+        if (num_bits_ == 8) {
+            pack_bits_8(quantized_vector, out_ptr, num_bits_);
+        } else {
+            pack_bits(quantized_vector, out_ptr, num_bits_);
+        }
     }
 
     inline const float* getRepresentation(uint index, std::vector<float>& representation) const {
@@ -366,10 +334,13 @@ class Graph {
             representation.clear();
             representation.resize(dimension_, 0);
             std::vector<uint8_t> quantized_vector(dimension_, 0);
-            // unpack_bits(quantized_vector, num_bits_, reinterpret_cast<const uint8_t*> (data_ptr), (size_t)
-            // dimension_);
-            unpack_bits(quantized_vector, reinterpret_cast<const uint8_t*>(data_ptr), num_bits_, dimension_);
-            // unpack_4bit(quantized_vector, reinterpret_cast<const uint8_t*> (data_ptr), dimension_);
+            if (num_bits_ == 4) {
+                unpack_bits_4(quantized_vector, reinterpret_cast<const uint8_t*>(data_ptr), num_bits_, dimension_);
+            } else if (num_bits_ == 8) {
+                unpack_bits_8(quantized_vector, reinterpret_cast<const uint8_t*>(data_ptr), num_bits_, dimension_);
+            } else {
+                unpack_bits(quantized_vector, reinterpret_cast<const uint8_t*>(data_ptr), num_bits_, dimension_);
+            }
             for (uint d = 0; d < dimension_; d++) {
                 float quantized_value = quantized_vector[d];
                 representation[d] = quantized_value * quant_deltas_[d] + quant_lower_bounds_[d];

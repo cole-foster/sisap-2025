@@ -50,8 +50,6 @@ class Task1 {
             throw std::runtime_error("Space name must be ip, sorry");
         }
         if (num_bits_ > 0) {
-            // only 4 bits
-            num_bits_ = 4;
             alg_ = new Graph(dataset_size_, dimension_, num_neighbors_, space_, num_bits_);
         } else {
             alg_ = new Graph(dataset_size_, dimension_, num_neighbors_, space_);
@@ -116,6 +114,7 @@ class Task1 {
             // alg_->trim_graph_hsp();  // trim the graph to keep only the top 10% of neighbors
             alg_->print_graph_stats();
         }
+        alg_->top_layer_graph_.reset();  // no search hierarchy
     }
 
     /* perform search over a batch of queries*/

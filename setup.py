@@ -6,7 +6,7 @@ ext_modules = [
         "Submission", 
         ["src/pybind_wrapper.cpp"],
         include_dirs=["src"],
-        extra_compile_args=["-O3", "-fopenmp", "-march=native", "--fast-math"],
+        extra_compile_args=["-O3", "-fopenmp", "-march=native"],
         extra_link_args=["-fopenmp"],
     ),
 ]

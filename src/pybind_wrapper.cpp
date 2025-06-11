@@ -50,6 +50,8 @@ class Task1 {
             throw std::runtime_error("Space name must be ip, sorry");
         }
         if (num_bits_ > 0) {
+            // only 4 bits
+            num_bits_ = 4;
             alg_ = new Graph(dataset_size_, dimension_, num_neighbors_, space_, num_bits_);
         } else {
             alg_ = new Graph(dataset_size_, dimension_, num_neighbors_, space_);
@@ -109,7 +111,7 @@ class Task1 {
     }
 
     /* perform search over a batch of queries*/
-    py::object search(py::object input, uint k, uint beam_size) {
+    py::object search(py::object input, uint k, uint beam_size, uint num_hops = 1000) {
         py::array_t <float, py::array::c_style | py::array::forcecast > items(input);
         auto buffer = items.request();
         size_t num_rows, num_cols;
@@ -125,7 +127,7 @@ class Task1 {
 
             #pragma omp parallel for
             for (uint q = 0; q < num_rows; q++) {
-                auto res = alg_->search((float*)items.data(q), beam_size, k);
+                auto res = alg_->search((float*)items.data(q), k, beam_size, num_hops);
                 for (uint i = 0; i < k; i++) {
                     if (i < res.size()) {
                         neighbors_ptr[q * k + i] = res[i].second;
@@ -281,5 +283,5 @@ PYBIND11_MODULE(Submission, m) {
         .def("train", &Task1::train_quantizer, py::arg("data"))
         .def("add_items", &Task1::addItems, py::arg("data"))
         .def("build", &Task1::build, py::arg("num_candidates"), py::arg("num_hops"), py::arg("num_iterations") = 1)
-        .def("search", &Task1::search, py::arg("data"), py::arg("k"), py::arg("beam_size") = 1);
+        .def("search", &Task1::search, py::arg("data"), py::arg("k"), py::arg("beam_size") = 1, py::arg("num_hops") = 1000);
 }

@@ -34,7 +34,7 @@ def run(dataset, k=30):
     
     # initialize index and add dataset items in batches
     num_bits = 4
-    num_neighbors = 48
+    num_neighbors = 64
     time_start = time.time()
     index = Task1(N, D, num_neighbors, num_bits)
 

@@ -233,7 +233,7 @@ int main(int argc, char** argv) {
                     #pragma omp parallel for
                     for (uint q = 0; q < testset_size; q++) {
                         float* queryPtr = test_pointer + q * dimension;
-                        est_knn[q] = alg->search(queryPtr, beam_size, k);
+                        est_knn[q] = alg->search(queryPtr, k, beam_size);
                     }
                 }
                 auto tEnd = std::chrono::high_resolution_clock::now();

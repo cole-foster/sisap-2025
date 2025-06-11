@@ -909,8 +909,8 @@ class Graph {
                     }
 
                     // fixed hsp test to update the graph
-                    // hsp_test(query_node, candidates, new_neighbors, max_neighbors_);
-                    fixed_hsp_test(query_node, candidates, new_neighbors, max_neighbors_);
+                    hsp_test(query_node, candidates, new_neighbors, max_neighbors_);
+                    // fixed_hsp_test(query_node, candidates, new_neighbors, max_neighbors_);
                     // test_knn(query_node, candidates, new_neighbors, max_neighbors_);
                     set_neighbors(query_node, new_neighbors);
                 }            
@@ -931,6 +931,13 @@ class Graph {
                         }
                     }
                     if (!flag_update) continue;
+
+                    // add automatically if there's room
+                    if (num_neighbors < max_neighbors_) {
+                        neighbor_neighbors[num_neighbors] = query_node;
+                        set_linkedListCount(get_linkedList(neighbor), num_neighbors + 1);
+                        continue;  // no need to do the hsp test
+                    }
 
                     // only update if distance is closer than any of the others...
                     float query_dist = compute_distance(query_ptr, neighbor);

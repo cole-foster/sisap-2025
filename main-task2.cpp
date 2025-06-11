@@ -35,9 +35,9 @@ double measure_graph_quality(const std::vector<std::vector<uint>>& gt_graph,
 int main(int argc, char** argv) {
     uint k = 15;
 
-    uint num_neighbors = 48;
-    uint num_hops = 48;
-    uint omap_size = 4000;
+    uint num_neighbors = 32;
+    uint num_hops = 32;
+    uint omap_size = 1000000;
     uint omap_neighbors = 32;
     if (argc > 3) {
         num_neighbors = (uint)atoi(argv[1]);
@@ -79,22 +79,22 @@ int main(int argc, char** argv) {
         printf("Iteration %d/%d\n", i + 1, num_iterations);
         int random_seed = i * 71;  // use a different seed for each iteration
         alg->set_omap_params(omap_size, omap_neighbors);
-        alg->iterate_knn_refinement(num_neighbors, num_hops, random_seed);
+        alg->iterate_knn_refinement(num_neighbors, num_hops);
 
         // measure time
         auto tEnd = std::chrono::high_resolution_clock::now();
         double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
-
+                            
         // measure memory
-        double peak_memory = 0; // (double)getPeakRSS() / 1024 / 1024;        // in MB
-        double current_memory = 0; //(double)getCurrentRSS() / 1024 / 1024;  // in MB
+        // double peak_memory = 0; // (double)getPeakRSS() / 1024 / 1024;        // in MB
+        // double current_memory = 0; //(double)getCurrentRSS() / 1024 / 1024;  // in MB
 
         // measure accuracy
         double accuracy = measure_graph_quality(gt_graph, *(alg->graph_), k);
 
         // print
         printf("Iteration, time, accuracy, current mem, peak mem\n");
-        printf("%d, %.3f, %.5f, %.3f, %.3f\n", i, time, 100 * accuracy, current_memory, peak_memory);
+        printf("%d, %.3f, %.5f\n", i, time, 100 * accuracy);//, current_memory, peak_memory);
         fflush(stdout);
     }
 

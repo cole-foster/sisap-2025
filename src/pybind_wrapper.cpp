@@ -224,9 +224,8 @@ class Task2 {
             py::gil_scoped_release l;
             for (uint i = 0; i < num_iterations; i++) {
                 printf(" * iteration %d/%d\n", i + 1, num_iterations);
-                int random_seed = i * 71;  // use a different seed for each iteration
                 alg_->set_omap_params(omap_size, omap_neighbors);
-                alg_->iterate_knn_refinement(num_neighbors, num_hops, random_seed);
+                alg_->iterate_knn_refinement(num_neighbors, num_hops);
             }
         }
 
@@ -275,7 +274,6 @@ PYBIND11_MODULE(Submission, m) {
         .def("add_items", &Task2::addItems, py::arg("data"))
         .def("create_knn", &Task2::create_knn, py::arg("k"), py::arg("num_neighbors"), py::arg("num_hops"),
              py::arg("omap_size"), py::arg("num_iterations"));
-
     
     py::class_<Task1>(m, "Task1")
         .def(py::init<const uint, const uint, const uint, const uint,  const std::string&>(), py::arg("dataset_size"), py::arg("dimension"), 

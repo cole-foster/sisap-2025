@@ -18,7 +18,7 @@ def prepare(dataset, task):
     fn, gt_fn = get_fn(dataset, task)
 
     download(url, fn)
-    #(gt_url, gt_fn)
+    download(gt_url, gt_fn)
 
 def get_query_count(dataset, task):
     fn, _ = get_fn(dataset, task) 

@@ -31,17 +31,29 @@ def run(dataset, k=30):
     f = h5py.File(fn)
     data_disk = DATASETS[dataset][task]['data'](f)
     N,D = data_disk.shape
+
+    if (dataset == 'ccnews-small'):
+        num_neighbors = 48
+        num_candidates = 64
+        num_hops = 32
+        num_iterations = 1
+    elif (dataset == 'gooaq'):
+        num_neighbors = 48
+        num_candidates = 64
+        num_hops = 32
+        num_iterations = 1
+
+    
     
     # initialize index and add dataset items in batches
     num_bits = 4
-    num_neighbors = 64
     time_start = time.time()
     index = Task1(N, D, num_neighbors, num_bits)
 
     ''' train quantizer '''
     print("Training quantizer...")
     start = 0
-    while start < N/4:
+    while start < N//2:
         end = min(start + 100000, N)
         subset = np.array(data_disk[start:end]).astype(np.float32)
         index.train(subset)
@@ -57,16 +69,13 @@ def run(dataset, k=30):
         start = end
 
     # ''' perform the graph construction '''
-    num_candidates = 128
-    num_hops = 64
-    num_iterations = 1
     index.build(num_candidates, num_hops, num_iterations)
     elapsed_build = time.time() - time_start
     print(f"Time taken to build index: {elapsed_build:.3f} seconds")
 
     queries = np.array(DATASETS[dataset][task]['queries'](f)).astype(np.float32)
     num_queries, _ = queries.shape
-    for beam_size in [30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 200]:
+    for beam_size in [30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 150, 200, 300, 400, 500, 1000]:
         identifier = f"index=({index_identifier}),query=(b={beam_size})"
 
         print(f"Querying with beam size: {beam_size}")

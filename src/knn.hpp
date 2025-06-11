@@ -261,8 +261,7 @@ class KNN {
         for (auto val : new_neighbors) {
             uint neighbor_node = val.second;
             float neighbor_dist = val.first;
-            if (neighbor_dist >= (*graph_)[neighbor_node][max_neighbors_-1].first) continue;
-
+            if (neighbor_dist >= (*graph_)[neighbor_node][max_neighbors_ - 1].first) continue;
             std::lock_guard<std::mutex> lock(node_neighbors_locks_[neighbor_node]);
 
             /* find place to insert into neighbors' neighbors */
@@ -305,6 +304,10 @@ class KNN {
         printf(" * begin random graph initialization...\n");
         graph_.reset();
         graph_ = std::make_unique<std::vector<std::vector<std::pair<float, uint>>>>(dataset_size_);
+
+
+        random_seed_ = 0;
+        srand(random_seed_);
 
         /* assign random neighbors for all nodes */
         printf("   - random neighbor assignment\n");
@@ -369,7 +372,7 @@ class KNN {
 
             /* refinement based graph construction */
             for (uint i = 0; i < num_iterations; i++) {
-                top_layer_graph_->graph_refinement_iteration(32,16);
+                top_layer_graph_->graph_refinement_iteration(64, 32);
             }
         }
 
@@ -386,14 +389,8 @@ class KNN {
 
 
     /* Build the kNN Graph */
-    void iterate_knn_refinement(uint num_neighbors, uint num_hops = 100, int random_seed = -1) {
+    void iterate_knn_refinement(uint num_neighbors, uint num_hops = 100) {
         /* initialize the random seed */
-        if (random_seed >= 0 && random_seed != random_seed_) {
-            random_seed_ = random_seed;
-        } else {
-            random_seed_ = time(nullptr);
-        }
-        srand(random_seed_);
 
         if (graph_ == nullptr) {
             init_random_graph(num_neighbors);
@@ -408,12 +405,16 @@ class KNN {
 
         /* initialize the observation map */
         {
+            auto tStart = std::chrono::high_resolution_clock::now();
             uint num_nodes_top = omap_size_; // (uint) sqrt(dataset_size_); // ((double) dataset_size_ / (double) max_neighbors_);
             if (num_nodes_top > 100) {
                 uint num_neighbors_top = omap_num_neighbors_;
                 uint num_iterations_top = 1;
                 init_top_layer_graph(num_nodes_top, num_neighbors_top, num_iterations_top);
             }
+            auto tEnd = std::chrono::high_resolution_clock::now();
+            double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+            printf(" * top layer graph initialized in %.3f seconds\n", time);
         }
 
         /* create a random ordering for the nodes, to the dataset */
@@ -446,8 +447,13 @@ class KNN {
                     res = internal_beam_search(query_ptr, start_nodes_, beam_size, num_hops);
                 } else {
                     // if top layer graph exists, use it to find the start node
-                    uint start_node = top_layer_graph_->search_start_node(reinterpret_cast<float*>(query_ptr));
-                    res = internal_beam_search(query_ptr, {start_node}, beam_size, num_hops);
+                    // uint start_node = top_layer_graph_->search_start_node(reinterpret_cast<float*>(query_ptr));
+                    auto res1 = top_layer_graph_->search((float*)(query_ptr), num_neighbors, beam_size, num_hops);
+                    res = internal_beam_search(query_ptr, {res1[0].second}, beam_size, num_hops);
+                    for (auto val : res1) {
+                        res.emplace(val.first, val.second);
+                        while (res.size() > num_neighbors) res.pop();
+                    }
                 }
                 while (res.size() > num_neighbors) res.pop();
 

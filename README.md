@@ -1,5 +1,4 @@
-# Refine and Dine
-Submission to the SISAP 2025 Indexing Challenge
+# Submission to the SISAP 2025 Indexing Challenge
 
 
 ### Python Bindings

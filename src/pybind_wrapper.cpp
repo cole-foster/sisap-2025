@@ -100,10 +100,12 @@ class Task1 {
 
     /* perform iterative construction */
     void build(uint num_candidates, uint num_hops = 100, uint num_iterations = 1) {
-        alg_->init_random_graph();
+        // alg_->init_random_graph();
+        uint num_nodes = (uint) 10*sqrt(dataset_size_);
+        alg_->init_empty_but_top_layer(num_nodes);
         for (uint i = 0; i < num_iterations; i++) {
             printf(" * iteration %u/%u\n", i + 1, num_iterations);
-            alg_->init_top_layer_graph(4000, 32, 1);
+            // alg_->init_top_layer_graph(4000, 32, 1);
             alg_->graph_refinement_iteration(num_candidates, num_hops);
             alg_->trim_graph_hsp();  // trim the graph to keep only the top 10% of neighbors
             alg_->print_graph_stats();

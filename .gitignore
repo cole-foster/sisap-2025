@@ -22,3 +22,5 @@ tmp/
 t_*
 *.txt
 *.out
+
+main-task1.cpp

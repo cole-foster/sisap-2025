@@ -368,7 +368,8 @@ class KNN {
         else {
 
             /* initialize the random graph*/
-            top_layer_graph_->init_random_graph();
+            // top_layer_graph_->init_random_graph();
+            top_layer_graph_->init_empty_but_top_layer(num_nodes);
 
             /* refinement based graph construction */
             for (uint i = 0; i < num_iterations; i++) {
@@ -406,7 +407,7 @@ class KNN {
         /* initialize the observation map */
         {
             auto tStart = std::chrono::high_resolution_clock::now();
-            uint num_nodes_top = omap_size_; // (uint) sqrt(dataset_size_); // ((double) dataset_size_ / (double) max_neighbors_);
+            uint num_nodes_top = (uint) 10*sqrt(dataset_size_); // (uint) sqrt(dataset_size_); // ((double) dataset_size_ / (double) max_neighbors_);
             if (num_nodes_top > 100) {
                 uint num_neighbors_top = omap_num_neighbors_;
                 uint num_iterations_top = 1;

@@ -65,7 +65,6 @@
 // }
 
 // Packs a vector of integers (each with num_bits bits) into a byte array
-// inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, uint num_bits, uint dimension) {
 inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, uint num_bits) {
     std::fill(out_bytes, out_bytes + ((values.size() * num_bits + 7) / 8), 0);  // zero-out
 
@@ -106,6 +105,7 @@ inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, ui
 //     }
 // }
 
+/* unpacks 4bit only, faster */
 inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values)
 {
     out_values.resize(num_values);
@@ -121,60 +121,6 @@ inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_byte
     }
 }
 
-
-// unpack_4bit_avx2
-// inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values) {
-//     if (out_values.size() < num_values) out_values.resize(num_values);
-//     size_t i = 0, j = 0;
-//     const size_t step = 32;  // 32 bytes = 64 nibbles
-
-//     for (; j + step <= (num_values + 1) / 2; j += step) {
-//         __m256i bytes = _mm256_loadu_si256((const __m256i*)(in_bytes + j));
-//         __m256i low_nibbles = _mm256_and_si256(bytes, _mm256_set1_epi8(0x0F));
-//         __m256i high_nibbles = _mm256_and_si256(_mm256_srli_epi16(bytes, 4), _mm256_set1_epi8(0x0F));
-
-//         // Interleave low/high nibbles into output
-//         alignas(32) uint8_t lows[32], highs[32];
-//         _mm256_store_si256((__m256i*)lows, low_nibbles);
-//         _mm256_store_si256((__m256i*)highs, high_nibbles);
-
-//         for (size_t k = 0; k < step && i + 1 < num_values; ++k) {
-//             out_values[i++] = lows[k];
-//             out_values[i++] = highs[k];
-//         }
-//     }
-//     // Handle remaining values
-//     for (; i + 1 < num_values; i += 2, ++j) {
-//         uint8_t byte = in_bytes[j];
-//         out_values[i] = byte & 0x0F;
-//         out_values[i + 1] = (byte >> 4) & 0x0F;
-//     }
-//     if (i < num_values) {
-//         out_values[i] = in_bytes[j] & 0x0F;
-//     }
-// }
-
-// Packs a vector of 4-bit values (0..15) into a byte array
-void pack_4bit(const std::vector<uint8_t>& values, uint8_t* out_bytes) {
-    size_t num_values = values.size();
-    size_t out_idx = 0;
-    for (size_t i = 0; i < num_values; i += 2) {
-        uint8_t low = values[i] & 0x0F;
-        uint8_t high = (i + 1 < num_values) ? (values[i + 1] & 0x0F) : 0;
-        out_bytes[out_idx++] = low | (high << 4);
-    }
-}
-
-// Unpacks a byte array into a vector of 4-bit values (0..15)
-void unpack_4bit(std::vector<uint8_t>& values, const uint8_t* in_bytes, size_t num_values) {
-    values.resize(num_values);
-    size_t in_idx = 0;
-    for (size_t i = 0; i < num_values; i += 2) {
-        uint8_t byte = in_bytes[in_idx++];
-        values[i] = byte & 0x0F;
-        if (i + 1 < num_values) values[i + 1] = (byte >> 4) & 0x0F;
-    }
-}
 
 typedef uint32_t uint;
 float MAX_FLOAT = std::numeric_limits<float>::max();
@@ -719,14 +665,14 @@ class Graph {
     }
 
     /* initialize a random graph */
-    void init_empty_but_top_layer(uint num_nodes = 4000) {
+    void init_empty_but_top_layer(uint num_nodes) {
         init_node_label_lookup();
         if (verbose_) printf("Begin empty but top layer graph initialization...\n");
         random_seed_ = 0;
         srand(random_seed_);
 
         printf("init top layer\n");
-        init_top_layer_graph(num_nodes, 32, 3);  // example parameters for top layer graph
+        init_top_layer_graph(num_nodes, 32, 1);  // example parameters for top layer graph
         for (uint node : top_layer_nodes_) {
             std::vector<uint> neighbors;
             top_layer_graph_->return_neighbors_labels(node, neighbors);
@@ -778,7 +724,7 @@ class Graph {
 
             /* refinement based graph construction */
             for (uint i = 0; i < num_iterations; i++) {
-                top_layer_graph_->graph_refinement_iteration(200, 100);
+                top_layer_graph_->graph_refinement_iteration(num_neighbors, num_neighbors);
             }
         }
 
@@ -821,18 +767,6 @@ class Graph {
             }
         }
 
-        // /* initialize the observation map */
-        // {
-        //     uint num_nodes_top = (uint) 8*sqrt(dataset_size_); // ((double) dataset_size_ / (double) max_neighbors_);
-        //     if (num_nodes_top > 100) {
-        //         uint num_neighbors_top = 32;
-        //         uint num_iterations_top = 0;
-        //         if (verbose_) ("* num_nodes_omap = %u, num_neighbors_top = %u, num_iterations_top = %u\n",
-        //         num_nodes_top, num_neighbors_top, num_iterations_top); init_top_layer_graph(num_nodes_top,
-        //         num_neighbors_top, num_iterations_top);
-        //     }
-        // }
-
         /* create a random ordering for the nodes, to the dataset */
         std::vector<uint> random_ordering(dataset_size_);
         std::iota(random_ordering.begin(), random_ordering.end(), 0);
@@ -863,8 +797,14 @@ class Graph {
                     batch_neighbors[qid] = internal_beam_search(query_ptr, start_nodes_, num_candidates, num_hops);
                 } else {
                     // if top layer graph exists, use it to find the start node
-                    uint start_node = top_layer_graph_->search_start_node(query_ptr);
-                    batch_neighbors[qid] = internal_beam_search(query_ptr, {start_node}, num_candidates, num_hops);
+                    // uint start_node = top_layer_graph_->search_start_node(query_ptr);
+                    // batch_neighbors[qid] = internal_beam_search(query_ptr, {start_node}, num_candidates, num_hops);
+
+                    auto res1 = top_layer_graph_->search((float*)(query_ptr), num_candidates, num_candidates, num_hops);
+                    batch_neighbors[qid] = internal_beam_search(query_ptr, {res1[0].second}, num_candidates, num_hops);
+                    for (auto val : res1) {
+                        batch_neighbors[qid].emplace(val.first, val.second);
+                    }
                 }
             }
             auto tEnd = std::chrono::high_resolution_clock::now();
@@ -890,10 +830,14 @@ class Graph {
                 std::vector<uint> new_neighbors;
                 {
                     // add candidates from search
-                    std::vector<std::pair<float, uint>> candidates = candidate_pairs;
+                    std::vector<std::pair<float, uint>> candidates;
                     std::unordered_set<uint> new_neighbors_set;  // to avoid duplicates
-                    for (auto val : candidates) {
-                        new_neighbors_set.insert(val.second);
+                    for (auto val : candidate_pairs) {
+                        uint idx = val.second;
+                        if (new_neighbors_set.insert(idx).second) {
+                            float dist = val.first;
+                            candidates.push_back({dist, idx});
+                        }
                     }
 
                     // add the existing neighbors

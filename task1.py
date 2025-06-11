@@ -38,12 +38,11 @@ def run(dataset, k=30):
         num_iterations = 2
     elif (dataset == 'gooaq'):
         num_neighbors = 48
-        num_candidates = 64
+        num_candidates = 48
         num_hops = 48
         num_iterations = 1
     index_identifier = "BrownCICESE-M-{num_neighbors}-C-{num_candidates}-H-{num_hops}-I-{num_iterations}"
 
-    
     
     # initialize index and add dataset items in batches
     num_bits = 4

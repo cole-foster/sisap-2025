@@ -39,9 +39,9 @@ def run(dataset, k=15):
         arr_omap_size = [N//2] 
         arr_num_iterations = [1]
     elif (dataset == 'gooaq'):
-        arr_num_neighbors = [32, 36, 48, 64]
-        arr_num_hops = [32, 32, 36, 42]
-        arr_omap_size = [1000000] * 4
+        arr_num_neighbors = [36, 48, 54, 64]
+        arr_num_hops = [36, 48, 54, 64]
+        arr_omap_size = [200000] * 4
         arr_num_iterations = [1] * 4
     
     # do this many times

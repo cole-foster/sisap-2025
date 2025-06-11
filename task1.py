@@ -24,7 +24,6 @@ def run(dataset, k=30):
     task = 'task1'
     print(f'Running {task} on {dataset}, k={k}')
     prepare(dataset, task)
-    index_identifier = "BrownCICESE"
 
     # get the dataset
     fn, _ = get_fn(dataset, task)
@@ -33,15 +32,16 @@ def run(dataset, k=30):
     N,D = data_disk.shape
 
     if (dataset == 'ccnews-small'):
-        num_neighbors = 48
+        num_neighbors = 32
         num_candidates = 64
-        num_hops = 32
-        num_iterations = 1
+        num_hops = 48
+        num_iterations = 2
     elif (dataset == 'gooaq'):
         num_neighbors = 48
         num_candidates = 64
-        num_hops = 32
+        num_hops = 48
         num_iterations = 1
+    index_identifier = "BrownCICESE-M-{num_neighbors}-C-{num_candidates}-H-{num_hops}-I-{num_iterations}"
 
     
     
@@ -88,7 +88,7 @@ def run(dataset, k=30):
 
         # convert to 0-indexing
         neighbors += 1
-        store_results(os.path.join("results/", dataset, task, f"{identifier}.h5"), index_identifier, dataset, task, distances, neighbors, elapsed_build, elapsed_search, identifier)
+        store_results(os.path.join("results/", dataset, task, f"{identifier}.h5"), "BrownCICESE", dataset, task, distances, neighbors, elapsed_build, elapsed_search, identifier)
 
     print("done!")
     f.close()

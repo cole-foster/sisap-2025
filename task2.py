@@ -42,7 +42,7 @@ def run(dataset, k=15):
         arr_num_neighbors = [32, 36, 48, 64]
         arr_num_hops = [32, 32, 36, 42]
         arr_omap_size = [1000000] * 4
-        arr_num_iterations = [1, 1, 1, 1]
+        arr_num_iterations = [1] * 4
     
     # do this many times
     path_list = [] 
@@ -76,32 +76,6 @@ def run(dataset, k=15):
 
         # explicitly delete for next iteration just in case
         del index
-
-    # done
-    f.close()
-
-    # get gt
-    _, gt_fn = get_fn(dataset, task)
-    f = h5py.File(gt_fn)
-    gt_I = np.array(DATASETS[dataset][task]['gt_I'](f))
-    f.close()
-
-    # measure recall
-    for res_path in path_list:
-        print(f"Evaluating {res_path}...")
-        f = h5py.File(res_path, 'r')
-        print(f.keys())
-        I = np.array(f['knns'])
-        f.close()
-        num_queries = I.shape[0]
-
-        recall = 0
-        for i in range(num_queries):
-            est_neighbors = I[i, :k]
-            gt_neighbors = gt_I[i, 1:k+1]
-            recall += len(set(est_neighbors) & set(gt_neighbors))
-        recall /= (num_queries * k)
-        print(f"Recall for {res_path}: {recall:.4f}")
 
 
 

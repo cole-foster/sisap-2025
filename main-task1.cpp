@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
     {
         /* Initialize Index */
         printf("Initializing the index\n");
-        uint num_bits = 4;
+        uint num_bits = 8;
         space = new distances::InnerProductSpace(dimension);
         Graph* alg = new Graph(dataset_size, dimension, num_neighbors, space, num_bits);
         alg->verbose_ = true; 
@@ -194,70 +194,106 @@ int main(int argc, char** argv) {
         printf("intialize random graph\n");
         alg->init_random_graph();
 
-        printf("begin graph refinement\n");
-        uint num_candidates = 128;
-        uint num_hops = 32;
-        uint num_iterations = 20;
-        for (uint i = 0; i < num_iterations; i++) {
-            printf(" * iteration %u/%u\n", i + 1, num_iterations);
+        // printf("begin graph refinement\n");
+        // uint num_candidates = 128;
+        // uint num_hops = 32;
+        // uint num_iterations = 20;
+        // for (uint i = 0; i < num_iterations; i++) {
+        //     printf(" * iteration %u/%u\n", i + 1, num_iterations);
 
+        //     {
+        //         auto tStart = std::chrono::high_resolution_clock::now();
+        //         alg->init_top_layer_graph(16000, 32, 1);
+        //         auto tEnd = std::chrono::high_resolution_clock::now();
+        //         double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+        //         printf(" * omap time: %.4f\n", time);
+        //     }
+
+        //     {
+        //         auto tStart = std::chrono::high_resolution_clock::now();
+        //         alg->graph_refinement_iteration(num_candidates, num_hops);
+        //         auto tEnd = std::chrono::high_resolution_clock::now();
+        //         double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+        //         printf(" * refinement time: %.4f\n", time);
+        //     }
+
+        //     alg->trim_graph_hsp();  // trim the graph to keep only the top 10% of neighbors
+        //     alg->print_graph_stats();
+
+        //     /* search */
+        //     uint k = 30; 
+        //     std::vector<uint> vec_beam_size = {30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 200, 400, 800, 1600};
+        //     for (uint beam_size : vec_beam_size) {
+
+        //         // begin search
+        //         std::vector<std::vector<std::pair<float, uint>>> est_knn(testset_size);
+        //         auto tStart = std::chrono::high_resolution_clock::now();
+        //         {
+        //             #pragma omp parallel for
+        //             for (uint q = 0; q < testset_size; q++) {
+        //                 float* queryPtr = test_pointer + q * dimension;
+        //                 est_knn[q] = alg->search(queryPtr, beam_size, k);
+        //             }
+        //         }
+        //         auto tEnd = std::chrono::high_resolution_clock::now();
+        //         double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+        //         double throughput = (double)testset_size / time;
+
+        //         // compute recall@k
+        //         double recall = 0.0;
+        //         for (uint q = 0; q < testset_size; q++) {
+        //             auto est_neighbors = est_knn[q];
+        //             if (est_neighbors.size() > k) est_neighbors.resize(k);
+        //             std::vector<uint> gt_neighbors = gt_knn[q];
+        //             if (gt_neighbors.size() > k) gt_neighbors.resize(k);
+
+        //             for (uint j = 0; j < k; j++) {
+        //                 uint est_neighbor = est_neighbors[j].second;
+        //                 if (std::find(gt_neighbors.begin(), gt_neighbors.end(), est_neighbor) != gt_neighbors.end()) {
+        //                     recall += 1.0;
+        //                 }   
+        //             }
+        //         }
+        //         recall /= (double) (testset_size * k);
+
+        //         printf("iteration, beam_size %u, throughput (qps): %.4f, recall@%d: %.4f\n", beam_size, throughput, k, recall);
+        //     }
+        // }
+
+        // begin search
+        printf("begin exact search\n");
+        {
+            uint k = 30;
+            std::vector<std::vector<std::pair<float, uint>>> est_knn(testset_size);
+            auto tStart = std::chrono::high_resolution_clock::now();
             {
-                auto tStart = std::chrono::high_resolution_clock::now();
-                alg->init_top_layer_graph(16000, 32, 1);
-                auto tEnd = std::chrono::high_resolution_clock::now();
-                double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
-                printf(" * omap time: %.4f\n", time);
-            }
-
-            {
-                auto tStart = std::chrono::high_resolution_clock::now();
-                alg->graph_refinement_iteration(num_candidates, num_hops);
-                auto tEnd = std::chrono::high_resolution_clock::now();
-                double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
-                printf(" * refinement time: %.4f\n", time);
-            }
-
-            alg->trim_graph_hsp();  // trim the graph to keep only the top 10% of neighbors
-            alg->print_graph_stats();
-
-            /* search */
-            uint k = 30; 
-            std::vector<uint> vec_beam_size = {30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 200, 400, 800, 1600};
-            for (uint beam_size : vec_beam_size) {
-
-                // begin search
-                std::vector<std::vector<std::pair<float, uint>>> est_knn(testset_size);
-                auto tStart = std::chrono::high_resolution_clock::now();
-                {
-                    #pragma omp parallel for
-                    for (uint q = 0; q < testset_size; q++) {
-                        float* queryPtr = test_pointer + q * dimension;
-                        est_knn[q] = alg->search(queryPtr, beam_size, k);
-                    }
-                }
-                auto tEnd = std::chrono::high_resolution_clock::now();
-                double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
-                double throughput = (double)testset_size / time;
-
-                // compute recall@k
-                double recall = 0.0;
+                #pragma omp parallel for
                 for (uint q = 0; q < testset_size; q++) {
-                    auto est_neighbors = est_knn[q];
-                    if (est_neighbors.size() > k) est_neighbors.resize(k);
-                    std::vector<uint> gt_neighbors = gt_knn[q];
-                    if (gt_neighbors.size() > k) gt_neighbors.resize(k);
-
-                    for (uint j = 0; j < k; j++) {
-                        uint est_neighbor = est_neighbors[j].second;
-                        if (std::find(gt_neighbors.begin(), gt_neighbors.end(), est_neighbor) != gt_neighbors.end()) {
-                            recall += 1.0;
-                        }   
-                    }
+                    float* queryPtr = test_pointer + q * dimension;
+                    est_knn[q] = alg->search_brute_force(queryPtr, k);
                 }
-                recall /= (double) (testset_size * k);
-
-                printf("iteration, beam_size %u, throughput (qps): %.4f, recall@%d: %.4f\n", beam_size, throughput, k, recall);
             }
+            auto tEnd = std::chrono::high_resolution_clock::now();
+            double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+            double throughput = (double)testset_size / time;
+
+            // compute recall@k
+            double recall = 0.0;
+            for (uint q = 0; q < testset_size; q++) {
+                auto est_neighbors = est_knn[q];
+                if (est_neighbors.size() > k) est_neighbors.resize(k);
+                std::vector<uint> gt_neighbors = gt_knn[q];
+                if (gt_neighbors.size() > k) gt_neighbors.resize(k);
+
+                for (uint j = 0; j < k; j++) {
+                    uint est_neighbor = est_neighbors[j].second;
+                    if (std::find(gt_neighbors.begin(), gt_neighbors.end(), est_neighbor) != gt_neighbors.end()) {
+                        recall += 1.0;
+                    }   
+                }
+            }
+            recall /= (double) (testset_size * k);
+            printf("iteration, beam_size %u, throughput (qps): %.4f, recall@%d: %.4f\n", 0, throughput, k, recall);
         }
 
         delete alg;

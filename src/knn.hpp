@@ -261,6 +261,8 @@ class KNN {
         for (auto val : new_neighbors) {
             uint neighbor_node = val.second;
             float neighbor_dist = val.first;
+            if (neighbor_dist >= (*graph_)[neighbor_node][max_neighbors_-1].first) continue;
+
             std::lock_guard<std::mutex> lock(node_neighbors_locks_[neighbor_node]);
 
             /* find place to insert into neighbors' neighbors */
@@ -367,7 +369,7 @@ class KNN {
 
             /* refinement based graph construction */
             for (uint i = 0; i < num_iterations; i++) {
-                top_layer_graph_->graph_refinement_iteration(128);
+                top_layer_graph_->graph_refinement_iteration(32,16);
             }
         }
 
@@ -409,7 +411,7 @@ class KNN {
             uint num_nodes_top = omap_size_; // (uint) sqrt(dataset_size_); // ((double) dataset_size_ / (double) max_neighbors_);
             if (num_nodes_top > 100) {
                 uint num_neighbors_top = omap_num_neighbors_;
-                uint num_iterations_top = 5;
+                uint num_iterations_top = 1;
                 init_top_layer_graph(num_nodes_top, num_neighbors_top, num_iterations_top);
             }
         }

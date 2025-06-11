@@ -30,41 +30,42 @@ def run(dataset, k=30):
     fn, _ = get_fn(dataset, task)
     f = h5py.File(fn)
     data_disk = DATASETS[dataset][task]['data'](f)
-    queries = np.array(DATASETS[dataset][task]['queries'](f)).astype(np.float32)
-    # gt_knn = np.array(DATASETS[dataset][task]['gt_I'](f)).astype(np.uint32)
     N,D = data_disk.shape
-    num_queries, _ = queries.shape
     
     # initialize index and add dataset items in batches
     num_bits = 4
-    num_neighbors = 64
+    num_neighbors = 48
     time_start = time.time()
     index = Task1(N, D, num_neighbors, num_bits)
 
     ''' train quantizer '''
+    print("Training quantizer...")
     start = 0
-    while start < N:
-        end = min(start + 200000, N)
+    while start < N/4:
+        end = min(start + 100000, N)
         subset = np.array(data_disk[start:end]).astype(np.float32)
         index.train(subset)
         start = end
 
     ''' load the data into the index '''
+    print("Loading data into index...")
     start = 0
     while start < N:
-        end = min(start + 200000, N)
+        end = min(start + 100000, N)
         subset = np.array(data_disk[start:end]).astype(np.float32)
         index.add_items(subset)
         start = end
 
-    ''' perform the graph construction '''
-    num_candidates = 64
-    num_hops = 32
+    # ''' perform the graph construction '''
+    num_candidates = 128
+    num_hops = 64
     num_iterations = 1
     index.build(num_candidates, num_hops, num_iterations)
     elapsed_build = time.time() - time_start
     print(f"Time taken to build index: {elapsed_build:.3f} seconds")
 
+    queries = np.array(DATASETS[dataset][task]['queries'](f)).astype(np.float32)
+    num_queries, _ = queries.shape
     for beam_size in [30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 200]:
         identifier = f"index=({index_identifier}),query=(b={beam_size})"
 
@@ -72,15 +73,12 @@ def run(dataset, k=30):
         time_start = time.time()
         neighbors,distances = index.search(queries, k=k, beam_size=beam_size)
         time_end = time.time()
-        elapsed_query = time_end - time_start
-        throughput = num_queries / elapsed_query
-        print(f"Time taken to query: {elapsed_query:.3f} seconds, throughput: {throughput:.2f} queries/sec")
+        elapsed_search = time_end - time_start
+        throughput = num_queries / elapsed_search
+        print(f"Time taken to query: {elapsed_search:.3f} seconds, throughput: {throughput:.2f} queries/sec")
 
         # convert to 0-indexing
         neighbors += 1
-
-        # create knn grap
-        neighbors = neighbors + 1 # FAISS is 0-indexed, groundtruth is 1-indexed
         store_results(os.path.join("results/", dataset, task, f"{identifier}.h5"), index_identifier, dataset, task, distances, neighbors, elapsed_build, elapsed_search, identifier)
 
     print("done!")

@@ -1,4 +1,4 @@
-# sisap-2025
+# Refine and Dine
 Submission to the SISAP 2025 Indexing Challenge
 
 

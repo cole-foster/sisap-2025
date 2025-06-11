@@ -34,15 +34,15 @@ def run(dataset, k=15):
 
     # parameters for different datasets
     if (dataset == 'ccnews-small'):
-        arr_num_neighbors = [48]
-        arr_num_hops = [48]
-        arr_omap_size = [4000]
-        arr_num_iterations = [2]
+        arr_num_neighbors = [64, 64, 64]
+        arr_num_hops = [32, 32, 32]
+        arr_omap_size = [1000, 2000, 4000]
+        arr_num_iterations = [1, 1, 1]
     elif (dataset == 'gooaq'):
-        arr_num_neighbors = [48]
-        arr_num_hops = [48]
-        arr_omap_size = [16000]
-        arr_num_iterations = [2]
+        arr_num_neighbors = [64, 64, 64] * 3
+        arr_num_hops = [32, 48, 64] * 3
+        arr_omap_size = [4000] * 9
+        arr_num_iterations = [1, 1, 1, 2, 2, 2, 3, 3, 3]
     
     # do this many times
     path_list = []

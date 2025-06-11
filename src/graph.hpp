@@ -4,6 +4,7 @@
 //     #define NUM_CORES 1
 // #endif
 
+#include <immintrin.h>
 #include <omp.h>
 
 #include <algorithm>
@@ -16,7 +17,6 @@
 #include <random>
 #include <unordered_map>
 #include <vector>
-#include <immintrin.h>
 
 #include "distances.h"
 #include "unique-priority-queue.hpp"
@@ -65,13 +65,13 @@
 // Packs a vector of integers (each with num_bits bits) into a byte array
 // inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, uint num_bits, uint dimension) {
 inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, uint num_bits) {
-    std::fill(out_bytes, out_bytes + ((values.size() * num_bits + 7) / 8), 0); // zero-out
+    std::fill(out_bytes, out_bytes + ((values.size() * num_bits + 7) / 8), 0);  // zero-out
 
     size_t bit_offset = 0;
     for (size_t i = 0; i < values.size(); ++i) {
-        uint8_t value = values[i] & ((1 << num_bits) - 1); // mask to num_bits
+        uint8_t value = values[i] & ((1 << num_bits) - 1);  // mask to num_bits
         size_t byte_idx = bit_offset / 8;
-        size_t bit_idx  = bit_offset % 8;
+        size_t bit_idx = bit_offset % 8;
 
         out_bytes[byte_idx] |= value << bit_idx;
 
@@ -85,7 +85,8 @@ inline void pack_bits(const std::vector<uint8_t>& values, uint8_t* out_bytes, ui
 
 // Unpacks a byte array into a vector of integers (each with num_bits bits)
 // inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, uint dimension) {
-inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values) {
+inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values)
+{
     out_values.resize(num_values);
     size_t bit_offset = 0;
 
@@ -102,6 +103,52 @@ inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_byte
         bit_offset += num_bits;
     }
 }
+
+// inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values)
+// {
+//     out_values.resize(num_values);
+//     size_t i = 0, j = 0;
+//     for (; i + 1 < num_values; i += 2, ++j) {
+//         uint8_t byte = in_bytes[j];
+//         out_values[i] = byte & 0x0F;
+//         out_values[i + 1] = (byte >> 4) & 0x0F;
+//     }
+//     if (i < num_values) {
+//         out_values[i] = in_bytes[j] & 0x0F;
+//     }
+// }
+
+// unpack_4bit_avx2
+// inline void unpack_bits(std::vector<uint8_t>& out_values, const uint8_t* in_bytes, uint num_bits, size_t num_values) {
+//     if (out_values.size() < num_values) out_values.resize(num_values);
+//     size_t i = 0, j = 0;
+//     const size_t step = 32;  // 32 bytes = 64 nibbles
+
+//     for (; j + step <= (num_values + 1) / 2; j += step) {
+//         __m256i bytes = _mm256_loadu_si256((const __m256i*)(in_bytes + j));
+//         __m256i low_nibbles = _mm256_and_si256(bytes, _mm256_set1_epi8(0x0F));
+//         __m256i high_nibbles = _mm256_and_si256(_mm256_srli_epi16(bytes, 4), _mm256_set1_epi8(0x0F));
+
+//         // Interleave low/high nibbles into output
+//         alignas(32) uint8_t lows[32], highs[32];
+//         _mm256_store_si256((__m256i*)lows, low_nibbles);
+//         _mm256_store_si256((__m256i*)highs, high_nibbles);
+
+//         for (size_t k = 0; k < step && i + 1 < num_values; ++k) {
+//             out_values[i++] = lows[k];
+//             out_values[i++] = highs[k];
+//         }
+//     }
+//     // Handle remaining values
+//     for (; i + 1 < num_values; i += 2, ++j) {
+//         uint8_t byte = in_bytes[j];
+//         out_values[i] = byte & 0x0F;
+//         out_values[i + 1] = (byte >> 4) & 0x0F;
+//     }
+//     if (i < num_values) {
+//         out_values[i] = in_bytes[j] & 0x0F;
+//     }
+// }
 
 // Packs a vector of 4-bit values (0..15) into a byte array
 void pack_4bit(const std::vector<uint8_t>& values, uint8_t* out_bytes) {
@@ -121,11 +168,9 @@ void unpack_4bit(std::vector<uint8_t>& values, const uint8_t* in_bytes, size_t n
     for (size_t i = 0; i < num_values; i += 2) {
         uint8_t byte = in_bytes[in_idx++];
         values[i] = byte & 0x0F;
-        if (i + 1 < num_values)
-            values[i + 1] = (byte >> 4) & 0x0F;
+        if (i + 1 < num_values) values[i + 1] = (byte >> 4) & 0x0F;
     }
 }
-
 
 typedef uint32_t uint;
 float MAX_FLOAT = std::numeric_limits<float>::max();
@@ -133,27 +178,27 @@ uint MAX_UINT = std::numeric_limits<uint>::max();
 
 class Graph {
    public:
-   bool verbose_ = false;
+    bool verbose_ = false;
 
     // data
     // bool data_owner_ = false;
     // char* data_pointer_{nullptr};  // pointer to the data in the graph
-    uint dataset_size_{0};         // max size of dataset
-    uint dimension_{0};            // dimensionality of the dataset
-    uint max_neighbors_{64};       // number of bottom layer neighbors
+    uint dataset_size_{0};    // max size of dataset
+    uint dimension_{0};       // dimensionality of the dataset
+    uint max_neighbors_{64};  // number of bottom layer neighbors
 
     // data: storing as --> x: representation(x), neighbors(x)
-    char* data_{nullptr};               // Storing data and graph together
-    size_t sizeElementLinks_{0};        // memory for the graph per node: max_neighbors_*uint
-    size_t sizeElementData_{0};         // memory for each data vector: dimension * sizeof(DATA_T) [UNLESS QUANTIZED]
-    size_t sizePerElement_{0};          // total memory for each node: sizeElementLinks_ + sizeElementData_
+    char* data_{nullptr};         // Storing data and graph together
+    size_t sizeElementLinks_{0};  // memory for the graph per node: max_neighbors_*uint
+    size_t sizeElementData_{0};   // memory for each data vector: dimension * sizeof(DATA_T) [UNLESS QUANTIZED]
+    size_t sizePerElement_{0};    // total memory for each node: sizeElementLinks_ + sizeElementData_
     std::vector<uint> node_labels_{};
-    std::unordered_map<uint,uint> node_labels_map_{};
+    std::unordered_map<uint, uint> node_labels_map_{};
     std::atomic<size_t> current_element_{0};
-    std::vector<uint> start_nodes_{}; 
+    std::vector<uint> start_nodes_{};
 
     // top layer graph
-    std::vector<uint> top_layer_nodes_{}; 
+    std::vector<uint> top_layer_nodes_{};
     std::unique_ptr<Graph> top_layer_graph_{nullptr};  // graph with neighbors only
 
     // parallelism
@@ -169,14 +214,14 @@ class Graph {
     /* quantization */
     bool quantization_ = false;
     bool is_trained = false;
-    uint num_bits_ = 0; // number of bits per dimension
-    uint num_levels_ = 0; // number of quantization levels
+    uint num_bits_ = 0;    // number of bits per dimension
+    uint num_levels_ = 0;  // number of quantization levels
     uint bytes_per_vector_ = 0;
     std::vector<float> quant_lower_bounds_;
     std::vector<float> quant_upper_bounds_;
     std::vector<float> quant_deltas_;
-    float quant_lower_global_ = -1.0f; // lower bound for quantization
-    float quant_upper_global_ = 1.0f; // upper bound for quantization
+    float quant_lower_global_ = -1.0f;  // lower bound for quantization
+    float quant_upper_global_ = 1.0f;   // upper bound for quantization
     float quant_delta_global_;
     std::vector<float> quant_values_;
 
@@ -190,13 +235,12 @@ class Graph {
     //--------------- MARK: CONSTRUCTOR
     Graph(uint dataset_size, uint dimension, uint max_neighbors, distances::SpaceInterface<float>* space)
         : dataset_size_(dataset_size), node_neighbors_locks_(dataset_size) {
-        
         // initializing the space (from hnswlib)
         space_ = space;
         dimension_ = dimension;
         distFunc_ = space_->get_dist_func();
         distFuncParam_ = space_->get_dist_func_param();
-        sizeElementData_ = dimension_ * sizeof(float);  
+        sizeElementData_ = dimension_ * sizeof(float);
         // printf("No Quantization\n");
 
         // initialize data, storing graph + dataset together (from hnswlib)
@@ -204,10 +248,10 @@ class Graph {
         if (max_neighbors_ == 0) printf(" * max_neighbors_ = 0, not storing graph with dataset\n");
         sizeElementLinks_ = sizeof(uint) + max_neighbors_ * sizeof(uint);
         sizePerElement_ = sizeElementData_ + sizeElementLinks_;
-        data_ = (char*) malloc(dataset_size_ * sizePerElement_);
+        data_ = (char*)malloc(dataset_size_ * sizePerElement_);
         if (data_ == nullptr) throw std::runtime_error("Not enough memory");
         node_labels_.resize(dataset_size_, 0);  // initialize labels
-        
+
         // initializing the visited list for beam search
         visitedListPool_ = std::unique_ptr<VisitedListPool>(new VisitedListPool(1, dataset_size_));
     }
@@ -215,7 +259,6 @@ class Graph {
     /* quantize dataset */
     Graph(uint dataset_size, uint dimension, uint max_neighbors, distances::SpaceInterface<float>* space, uint num_bits)
         : dataset_size_(dataset_size), node_neighbors_locks_(dataset_size) {
-        
         // initializing the space (from hnswlib)
         space_ = space;
         dimension_ = dimension;
@@ -225,24 +268,25 @@ class Graph {
         /* quantization */
         quantization_ = true;
         num_bits_ = num_bits;
-        num_levels_ = (1u << num_bits_); // number of quantization levels
-        bytes_per_vector_ = (num_bits_*dimension_ + 7) / 8; // number of bytes per vector
-        printf("Quantization: %u bits per dimension, %u levels, %u bytes per vector\n", num_bits, (unsigned int)num_levels_, bytes_per_vector_);
+        num_levels_ = (1u << num_bits_);                       // number of quantization levels
+        bytes_per_vector_ = (num_bits_ * dimension_ + 7) / 8;  // number of bytes per vector
+        printf("Quantization: %u bits per dimension, %u levels, %u bytes per vector\n", num_bits,
+               (unsigned int)num_levels_, bytes_per_vector_);
         sizeElementData_ = bytes_per_vector_;
         is_trained = false;
-        quant_lower_bounds_.resize(dimension_,-1.0f);
-        quant_upper_bounds_.resize(dimension_,1.0f);
-        quant_deltas_.resize(dimension_, (2) / ((float) num_levels_ - 1));
-        quant_lower_global_ = -1.0f; // lower bound for quantization
-        quant_upper_global_ = 1.0f; // upper bound for quantization
-        quant_delta_global_ = (2) / ((float) num_levels_ - 1);
+        quant_lower_bounds_.resize(dimension_, -1.0f);
+        quant_upper_bounds_.resize(dimension_, 1.0f);
+        quant_deltas_.resize(dimension_, (2) / ((float)num_levels_ - 1));
+        quant_lower_global_ = -1.0f;  // lower bound for quantization
+        quant_upper_global_ = 1.0f;   // upper bound for quantization
+        quant_delta_global_ = (2) / ((float)num_levels_ - 1);
 
         // initialize data, storing graph + dataset together (from hnswlib)
         max_neighbors_ = max_neighbors;
         if (max_neighbors_ == 0) printf(" * max_neighbors_ = 0, not storing graph with dataset\n");
         sizeElementLinks_ = sizeof(uint) + max_neighbors_ * sizeof(uint);
         sizePerElement_ = sizeElementData_ + sizeElementLinks_;
-        data_ = (char*) malloc(dataset_size_ * sizePerElement_);
+        data_ = (char*)malloc(dataset_size_ * sizePerElement_);
         if (data_ == nullptr) throw std::runtime_error("Not enough memory");
         node_labels_.resize(dataset_size_, 0);  // initialize labels
         // initializing the visited list for beam search
@@ -252,9 +296,7 @@ class Graph {
         if (data_ != nullptr) free(data_);
         data_ = nullptr;
     };
-    void set_num_cores(uint num_cores) { 
-        num_cores_ = num_cores; 
-    }
+    void set_num_cores(uint num_cores) { num_cores_ = num_cores; }
 
     /* load each data point separately, for management in data_ */
     void add_point(const float* element_ptr, uint element_label) {
@@ -262,9 +304,9 @@ class Graph {
         if (element_id >= dataset_size_) throw std::runtime_error("Element ID exceeded dataset_size_");
         node_labels_[element_id] = element_label;  // set the label for the element
         memset(data_ + element_id * sizePerElement_, 0, sizePerElement_);
-        if (quantization_) {            
+        if (quantization_) {
             std::vector<uint8_t> compressed_vec(dimension_, 0);
-            quantized_vector(element_ptr, compressed_vec.data());
+            quantize_vector(element_ptr, compressed_vec.data());
             memcpy(data_ + element_id * sizePerElement_ + sizeElementLinks_, compressed_vec.data(), sizeElementData_);
         } else {
             memcpy(data_ + element_id * sizePerElement_ + sizeElementLinks_, element_ptr, sizeElementData_);
@@ -281,26 +323,25 @@ class Graph {
     }
 
     //--------------- MARK: DISTANCES
-    inline const char* getDataByInternalId(uint index) const { 
-        return (data_ + index * sizePerElement_ + sizeElementLinks_);   // data is offset by links
+    inline const char* getDataByInternalId(uint index) const {
+        return (data_ + index * sizePerElement_ + sizeElementLinks_);  // data is offset by links
     }
     float compute_distance(const float* index1_ptr, const float* index2_ptr) const {
         return distFunc_(index1_ptr, index2_ptr, distFuncParam_);
     }
     float compute_distance(const float* index1_ptr, uint index2) const {
         std::vector<float> tmp;
-        return distFunc_(index1_ptr, getRepresentation(index2,tmp), distFuncParam_);
+        return distFunc_(index1_ptr, getRepresentation(index2, tmp), distFuncParam_);
     }
     float compute_distance(uint index1, const float* index2_ptr) const {
         std::vector<float> tmp;
-        return distFunc_(getRepresentation(index1,tmp), index2_ptr, distFuncParam_);
+        return distFunc_(getRepresentation(index1, tmp), index2_ptr, distFuncParam_);
     }
     float compute_distance(uint index1, uint index2) const {
         std::vector<float> tmp1;
         std::vector<float> tmp2;
-        return distFunc_(getRepresentation(index1,tmp1), getRepresentation(index2,tmp2), distFuncParam_);
+        return distFunc_(getRepresentation(index1, tmp1), getRepresentation(index2, tmp2), distFuncParam_);
     }
-
 
     //--------------- MARK: QUANTIZATION
     void train_quantizer(float* data, uint num_elements) {
@@ -326,6 +367,13 @@ class Graph {
             }
         }
 
+        // for (uint d = 0; d < dimension_; d++) {
+        //     quant_lower_bounds_[d] /= 1.2;
+        //     quant_upper_bounds_[d] /= 1.2;
+        // }
+
+
+
         // NEED TO ACCOUNT FOR ZERO
         quant_deltas_.resize(dimension_);
         for (uint d = 0; d < dimension_; d++) {
@@ -334,24 +382,26 @@ class Graph {
                 quant_lower_bounds_[d] = ave - 0.01f;
                 quant_upper_bounds_[d] = ave + 0.01f;
             }
-            quant_deltas_[d] = (quant_upper_bounds_[d] - quant_lower_bounds_[d]) / ((float) num_levels_ - 1);
+            quant_deltas_[d] = (quant_upper_bounds_[d] - quant_lower_bounds_[d]) / ((float)num_levels_ - 1);
         }
 
-        quant_delta_global_ = (quant_upper_global_ - quant_lower_global_) / ((float) num_levels_ - 1);
+        quant_delta_global_ = (quant_upper_global_ - quant_lower_global_) / ((float)num_levels_ - 1);
         quant_values_.resize(num_levels_);
         for (uint i = 0; i < num_levels_; i++) {
-            quant_values_[i] = (float) i * quant_delta_global_ + quant_lower_global_;
+            quant_values_[i] = (float)i * quant_delta_global_ + quant_lower_global_;
         }
 
         return;
     }
 
-    void quantized_vector(const float* element_ptr, uint8_t* out_ptr) const {
+    void quantize_vector(const float* element_ptr, uint8_t* out_ptr) const {
         std::vector<uint8_t> quantized_vector(dimension_, 0);
         for (size_t d = 0; d < dimension_; d++) {
             float value = element_ptr[d];
-            uint8_t quantized_idx = static_cast<uint8_t>(std::floor((value - quant_lower_bounds_[d]) / quant_deltas_[d] + 0.5));
-            // uint8_t quantized_idx = static_cast<uint8_t>(std::floor((value - quant_lower_global_) / quant_delta_global_ + 0.5));
+            uint8_t quantized_idx =
+                static_cast<uint8_t>(std::floor((value - quant_lower_bounds_[d]) / quant_deltas_[d] + 0.5));
+            // uint8_t quantized_idx = static_cast<uint8_t>(std::floor((value - quant_lower_global_) /
+            // quant_delta_global_ + 0.5));
             if (quantized_idx < 0) quantized_idx = 0;
             if (quantized_idx >= num_levels_) quantized_idx = num_levels_ - 1;
             quantized_vector[d] = quantized_idx;
@@ -362,21 +412,22 @@ class Graph {
 
     inline const float* getRepresentation(uint index, std::vector<float>& representation) const {
         const char* data_ptr = getDataByInternalId(index);
-        if (quantization_) { 
+        if (quantization_) {
             representation.clear();
-            representation.resize(dimension_,0);
+            representation.resize(dimension_, 0);
             std::vector<uint8_t> quantized_vector(dimension_, 0);
-            // unpack_bits(quantized_vector, num_bits_, reinterpret_cast<const uint8_t*> (data_ptr), (size_t) dimension_);
-            unpack_bits(quantized_vector, reinterpret_cast<const uint8_t*> (data_ptr), num_bits_, dimension_);
+            // unpack_bits(quantized_vector, num_bits_, reinterpret_cast<const uint8_t*> (data_ptr), (size_t)
+            // dimension_);
+            unpack_bits(quantized_vector, reinterpret_cast<const uint8_t*>(data_ptr), num_bits_, dimension_);
             // unpack_4bit(quantized_vector, reinterpret_cast<const uint8_t*> (data_ptr), dimension_);
             for (uint d = 0; d < dimension_; d++) {
                 float quantized_value = quantized_vector[d];
                 representation[d] = quantized_value * quant_deltas_[d] + quant_lower_bounds_[d];
             }
             return representation.data();
-        } 
+        }
         // if not quantized, return the float representation
-        else { // MAKE THIS FASTER
+        else {  // MAKE THIS FASTER
             // representation.clear();
             // representation.resize(dimension_, 0);
             // memcpy(representation.data(), data_ptr, dimension_ * sizeof(float));
@@ -384,21 +435,14 @@ class Graph {
         }
     }
 
-
     //--------------- MARK: NEIGHBORS
     // get the linked list of index for the top/bottom graph
-    uint* get_linkedList(uint index) const {
-        return (uint*) (data_ + index * sizePerElement_);
-    }
-    uint get_linkedListCount(uint* ptr) const {
-        return *(ptr);
-    }
-    void set_linkedListCount(uint* ptr, uint count) const {
-        *(ptr) = count;
-    }
+    uint* get_linkedList(uint index) const { return (uint*)(data_ + index * sizePerElement_); }
+    uint get_linkedListCount(uint* ptr) const { return *(ptr); }
+    void set_linkedListCount(uint* ptr, uint count) const { *(ptr) = count; }
     // set the neighbors, given a vector
     void set_neighbors(uint index, const std::vector<uint>& neighbors) {
-        uint num_neighbors = (uint) neighbors.size();
+        uint num_neighbors = (uint)neighbors.size();
         if (num_neighbors > max_neighbors_) num_neighbors = max_neighbors_;
         uint* index_data = get_linkedList(index);
         set_linkedListCount(index_data, num_neighbors);
@@ -414,11 +458,10 @@ class Graph {
         return (uint*)(indexData + 1);
     }
 
-
     //--------------- MARK: I/O
 
     void save_graph(std::string filename) {
-        if (verbose_)printf("Saving Graph to: %s\n", filename.c_str());
+        if (verbose_) printf("Saving Graph to: %s\n", filename.c_str());
         std::ofstream outputFileStream(filename, std::ios::binary);
         if (!outputFileStream.is_open()) {
             printf("Open File Error\n");
@@ -426,13 +469,13 @@ class Graph {
         }
 
         // output the datasetSize, graphNeighborsTop, graphNeighborsBottom, sizeElementLinks_
-        outputFileStream.write((char*)&dataset_size_,    sizeof(uint));
-        outputFileStream.write((char*)&max_neighbors_,  sizeof(uint));
+        outputFileStream.write((char*)&dataset_size_, sizeof(uint));
+        outputFileStream.write((char*)&max_neighbors_, sizeof(uint));
         outputFileStream.write((char*)&sizeElementLinks_, sizeof(size_t));
 
         // write the top/bottom linked lists for each element
         for (uint index = 0; index < dataset_size_; index++) {
-            outputFileStream.write((char*) data_ + index * sizePerElement_, sizeElementLinks_);
+            outputFileStream.write((char*)data_ + index * sizePerElement_, sizeElementLinks_);
         }
 
         outputFileStream.close();
@@ -464,7 +507,7 @@ class Graph {
 
         // read the top/bottom linked lists for each element
         for (uint index = 0; index < dataset_size_; index++) {
-            inputFileStream.read((char*) data_ + index * sizePerElement_, sizeElementLinks_);
+            inputFileStream.read((char*)data_ + index * sizePerElement_, sizeElementLinks_);
         }
 
         inputFileStream.close();
@@ -493,11 +536,9 @@ class Graph {
             if (num_neighbors < min_num_neighbors) min_num_neighbors = num_neighbors;
             total_num_neighbors += num_neighbors;
         }
-        printf(" * num neighbors: min = %u, max = %u, avg = %.2f\n", 
-               min_num_neighbors, max_num_neighbors, (float)total_num_neighbors / dataset_size_);
-        
+        printf(" * num neighbors: min = %u, max = %u, avg = %.2f\n", min_num_neighbors, max_num_neighbors,
+               (float)total_num_neighbors / dataset_size_);
     }
-
 
     //====================================================================================================
     //
@@ -512,9 +553,9 @@ class Graph {
     //====================================================================================================
 
     /* Normal beam search: start from given start nodes */
-    std::priority_queue<std::pair<float, uint>> 
-    internal_beam_search(const float* query_ptr, const std::vector<uint>& start_nodes, uint beam_size, uint max_hops = 1000) const {
-
+    std::priority_queue<std::pair<float, uint>> internal_beam_search(const float* query_ptr,
+                                                                     const std::vector<uint>& start_nodes,
+                                                                     uint beam_size, uint max_hops = 1000) const {
         // get the visited list
         VisitedList* vl = visitedListPool_->getFreeVisitedList();
         vl_type* visited_array = vl->mass;
@@ -555,7 +596,7 @@ class Graph {
                 // compute distance, skip if already visisted
                 if (visited_array[neighbor_node] == visited_array_tag) continue;
                 visited_array[neighbor_node] = visited_array_tag;
-                float dist = compute_distance(query_ptr, neighbor_node); 
+                float dist = compute_distance(query_ptr, neighbor_node);
 
                 // add to beam if closer than some point in the beam, or beam not yet full
                 if (topCandidates.size() < beam_size || dist <= lower_bound) {
@@ -573,10 +614,8 @@ class Graph {
         return topCandidates;
     }
 
-
     /* Greedy search from given start nodes, fast */
     uint internal_greedy_search(const float* query_ptr, std::vector<uint> start_nodes, uint max_hops = 1000) {
-
         uint candidate_node = 0;
         float candidate_distance = MAX_FLOAT;
         for (uint start_node : start_nodes) {
@@ -597,8 +636,8 @@ class Graph {
             // iterate through node neighbors
             uint num_neighbors;
             uint* neighbors = get_neighbors(candidate_node, num_neighbors);
-            for (int m = 0; m < num_neighbors; m++) {      
-                uint neighbor_node = neighbors[m];          
+            for (int m = 0; m < num_neighbors; m++) {
+                uint neighbor_node = neighbors[m];
                 float dist = compute_distance(query_ptr, neighbor_node);
                 if (dist < candidate_distance) {
                     candidate_distance = dist;
@@ -612,7 +651,6 @@ class Graph {
         return candidate_node;
     }
 
-
     //====================================================================================================
     //
     //
@@ -624,7 +662,7 @@ class Graph {
     //
     //
     //====================================================================================================
-    int random_seed_ = 0; 
+    int random_seed_ = 0;
 
     /* construct the fixed degree hsp graph by brute force */
     void brute_force_construction() {
@@ -639,12 +677,12 @@ class Graph {
         std::vector<uint> candidates(dataset_size_);
         std::iota(candidates.begin(), candidates.end(), 0);  // fill with 0, 1, ..., dataset_size_ - 1
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (uint node = 0; node < dataset_size_; node++) {
             std::vector<float> tmp;
             const float* node_ptr = getRepresentation(node, tmp);
 
-            std::vector<std::pair<float,uint>> candidates(dataset_size_);
+            std::vector<std::pair<float, uint>> candidates(dataset_size_);
             for (uint x = 0; x < dataset_size_; x++) {
                 float dist = compute_distance(node_ptr, x);
                 candidates[x] = std::make_pair(dist, x);
@@ -676,7 +714,6 @@ class Graph {
         }
     }
 
-    
     // construction of graph on subset, recursive construction
     void init_top_layer_graph(uint num_nodes, uint num_neighbors, uint num_iterations = 0) {
         if (verbose_) printf(" * begin omap initialization...\n");
@@ -702,10 +739,9 @@ class Graph {
         /* brute force construction of top layer graph */
         if (num_nodes < 2000 || num_iterations == 0) {
             top_layer_graph_->brute_force_construction();
-        } 
+        }
         /* refinement based construction of top layer graph */
         else {
-
             /* initialize the random graph*/
             top_layer_graph_->init_random_graph();
 
@@ -719,8 +755,8 @@ class Graph {
     }
 
     /* construction in batches: using the full precision vectors */
-    void update_graph(const float* element_ptrs, const uint* element_ids, uint num_elements, uint num_candidates, uint num_hops=1000) {
-
+    void update_graph(const float* element_ptrs, const uint* element_ids, uint num_elements, uint num_candidates,
+                      uint num_hops = 1000) {
         /* perform the searches in parallel */
         uint batch_size = 10000;
         std::vector<std::priority_queue<std::pair<float, uint>>> batch_neighbors(batch_size);
@@ -729,7 +765,7 @@ class Graph {
             uint batch_end = batch_begin + batch_size;
             if (batch_end > num_elements) batch_end = num_elements;
 
-            #pragma omp parallel for
+#pragma omp parallel for
             for (uint it = 0; it < batch_end - batch_begin; it++) {
                 uint qid = batch_begin + it;
                 const float* query_ptr = element_ptrs + qid * dimension_;
@@ -746,8 +782,8 @@ class Graph {
                 }
             }
 
-            /* batch update of the graph */
-            #pragma omp parallel for
+/* batch update of the graph */
+#pragma omp parallel for
             for (uint it = 0; it < batch_end - batch_begin; it++) {
                 uint qid = batch_begin + it;
                 const float* query_ptr = element_ptrs + qid * dimension_;
@@ -757,11 +793,11 @@ class Graph {
                 // update the neighbors of query_node
                 std::vector<uint> new_neighbors;
                 {
-                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[query_node]); 
+                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[query_node]);
 
                     // add candidates from search
                     std::unordered_set<uint> new_neighbors_set;  // to avoid duplicates
-                    std::vector<std::pair<float,uint>> candidates;
+                    std::vector<std::pair<float, uint>> candidates;
                     while (!batch_neighbors[it].empty()) {
                         candidates.push_back(batch_neighbors[it].top());
                         new_neighbors_set.insert(batch_neighbors[it].top().second);
@@ -803,12 +839,12 @@ class Graph {
 
                     // only update if distance is closer than any of the others...
                     float query_dist = compute_distance(query_ptr, neighbor);
-                    float max_dist = compute_distance(neighbor, neighbor_neighbors[num_neighbors-1]);
+                    float max_dist = compute_distance(neighbor, neighbor_neighbors[num_neighbors - 1]);
                     if (query_dist > max_dist) {
                         continue;  // do not update if the query node is not closer than the furthest neighbor
                     }
-                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[neighbor]); 
-                    std::vector<std::pair<float,uint>> candidates = {{query_dist,query_node}};
+                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[neighbor]);
+                    std::vector<std::pair<float, uint>> candidates = {{query_dist, query_node}};
                     for (uint m = 0; m < num_neighbors; m++) {
                         float distance = compute_distance(query_ptr, neighbor_neighbors[m]);
                         candidates.push_back({distance, neighbor_neighbors[m]});
@@ -831,7 +867,8 @@ class Graph {
     void checkStuff() {
         std::unordered_set<uint> label_check(node_labels_.begin(), node_labels_.end());
         if (label_check.size() != dataset_size_) {
-            printf(" * ERROR: node_labels_ size mismatch with dataset_size_ (%u vs %zu)\n", (unsigned int)dataset_size_, label_check.size());
+            printf(" * ERROR: node_labels_ size mismatch with dataset_size_ (%u vs %zu)\n", (unsigned int)dataset_size_,
+                   label_check.size());
         } else {
             printf("node labels good?\n");
         }
@@ -840,16 +877,16 @@ class Graph {
             uint node_label = node_labels_[node_id];
             uint node_id_mapped = node_labels_map_[node_label];
             if (node_id != node_id_mapped) {
-                printf(" * ERROR: node_id %u does not match mapped id %u for label %u\n", node_id, node_id_mapped, node_label);
+                printf(" * ERROR: node_id %u does not match mapped id %u for label %u\n", node_id, node_id_mapped,
+                       node_label);
             }
         }
     }
 
-
     /* refinement-based navigation graph construction */
-    void graph_refinement_iteration(uint num_candidates, uint num_hops=1000) {
+    void graph_refinement_iteration(uint num_candidates, uint num_hops = 1000) {
         if (verbose_) printf(" * begin new iteration of graph refinement...\n");
-        
+
         /* initialize start nodes for search on the graph */
         start_nodes_.clear();
         for (uint m = 0; m < max_neighbors_; m++) {
@@ -862,8 +899,9 @@ class Graph {
         //     if (num_nodes_top > 100) {
         //         uint num_neighbors_top = 32;
         //         uint num_iterations_top = 0;
-        //         if (verbose_) ("* num_nodes_omap = %u, num_neighbors_top = %u, num_iterations_top = %u\n", num_nodes_top, num_neighbors_top, num_iterations_top);
-        //         init_top_layer_graph(num_nodes_top, num_neighbors_top, num_iterations_top);
+        //         if (verbose_) ("* num_nodes_omap = %u, num_neighbors_top = %u, num_iterations_top = %u\n",
+        //         num_nodes_top, num_neighbors_top, num_iterations_top); init_top_layer_graph(num_nodes_top,
+        //         num_neighbors_top, num_iterations_top);
         //     }
         // }
 
@@ -886,11 +924,11 @@ class Graph {
 
             /* perform the searches in parallel */
             auto tStart = std::chrono::high_resolution_clock::now();
-            #pragma omp parallel for
+#pragma omp parallel for
             for (uint qid = 0; qid < batch_end - batch_begin; qid++) {
                 uint query_node = random_ordering[batch_begin + qid];
                 std::vector<float> tmp;
-                const float* query_ptr = getRepresentation(query_node,tmp);
+                const float* query_ptr = getRepresentation(query_node, tmp);
 
                 /* perform the beam search to collect candidates */
                 if (top_layer_graph_ == nullptr) {
@@ -906,14 +944,14 @@ class Graph {
 
             /* batch update of the graph */
             tStart = std::chrono::high_resolution_clock::now();
-            #pragma omp parallel for
+#pragma omp parallel for
             for (uint qid = 0; qid < batch_end - batch_begin; qid++) {
                 uint query_node = random_ordering[batch_begin + qid];
                 std::vector<float> tmp;
-                const float* query_ptr = getRepresentation(query_node,tmp);
+                const float* query_ptr = getRepresentation(query_node, tmp);
 
                 // get the new candidate nodes
-                std::vector<std::pair<float,uint>> candidate_pairs;
+                std::vector<std::pair<float, uint>> candidate_pairs;
                 while (!batch_neighbors[qid].empty()) {
                     candidate_pairs.push_back(batch_neighbors[qid].top());
                     batch_neighbors[qid].pop();
@@ -923,14 +961,14 @@ class Graph {
                 std::vector<uint> new_neighbors;
                 {
                     // add candidates from search
-                    std::vector<std::pair<float,uint>> candidates = candidate_pairs;
+                    std::vector<std::pair<float, uint>> candidates = candidate_pairs;
                     std::unordered_set<uint> new_neighbors_set;  // to avoid duplicates
                     for (auto val : candidates) {
                         new_neighbors_set.insert(val.second);
                     }
 
                     // add the existing neighbors
-                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[query_node]); 
+                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[query_node]);
                     uint num_neighbors;
                     uint* current_neighbors = get_neighbors(query_node, num_neighbors);
                     for (uint m = 0; m < num_neighbors; m++) {
@@ -950,7 +988,7 @@ class Graph {
 
                 // update the reverse links of query_node
                 for (uint neighbor : new_neighbors) {
-                // for (auto val : candidate_pairs) {
+                    // for (auto val : candidate_pairs) {
                     // uint neighbor = val.second;
                     // float query_dist = val.first;
 
@@ -968,12 +1006,12 @@ class Graph {
 
                     // only update if distance is closer than any of the others...
                     float query_dist = compute_distance(query_ptr, neighbor);
-                    float max_dist = compute_distance(neighbor, neighbor_neighbors[num_neighbors-1]);
+                    float max_dist = compute_distance(neighbor, neighbor_neighbors[num_neighbors - 1]);
                     if (query_dist > max_dist) {
                         continue;  // do not update if the query node is not closer than the furthest neighbor
                     }
-                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[neighbor]); 
-                    std::vector<std::pair<float,uint>> candidates = {{query_dist, query_node}};
+                    std::lock_guard<std::mutex> lock(node_neighbors_locks_[neighbor]);
+                    std::vector<std::pair<float, uint>> candidates = {{query_dist, query_node}};
                     for (uint m = 0; m < num_neighbors; m++) {
                         float distance = compute_distance(query_ptr, neighbor_neighbors[m]);
                         candidates.push_back({distance, neighbor_neighbors[m]});
@@ -998,7 +1036,8 @@ class Graph {
             batch_begin = batch_end;
         }
 
-        if (verbose_) printf(" * graph refinement done, time search = %.2f s, time update = %.2f s\n", time_search, time_update);
+        if (verbose_)
+            printf(" * graph refinement done, time search = %.2f s, time update = %.2f s\n", time_search, time_update);
 
         return;
     }
@@ -1006,8 +1045,8 @@ class Graph {
     void trim_graph_hsp() {
         if (verbose_) printf(" * begin graph trimming...\n");
 
-        // iterate through all nodes
-        #pragma omp parallel for
+// iterate through all nodes
+#pragma omp parallel for
         for (uint node = 0; node < dataset_size_; node++) {
             std::vector<float> tmp;
             const float* node_ptr = getRepresentation(node, tmp);
@@ -1017,7 +1056,7 @@ class Graph {
             uint* neighbors = get_neighbors(node, num_neighbors);
 
             // compute distances to neighbors
-            std::vector<std::pair<float,uint>> candidates;
+            std::vector<std::pair<float, uint>> candidates;
             for (uint m = 0; m < num_neighbors; m++) {
                 float dist = compute_distance(node_ptr, neighbors[m]);
                 candidates.push_back(std::make_pair(dist, neighbors[m]));
@@ -1031,14 +1070,11 @@ class Graph {
         return;
     }
 
-
-    
-
-
     //------------------- MARK: HSP REFINEMENT
 
     // use maxK to constrain the hsp test to the maxK closest elements in the set
-    void hsp_test(uint query, const std::vector<std::pair<float,uint>>& candidates, std::vector<uint>& neighbors, uint m = 0) const {
+    void hsp_test(uint query, const std::vector<std::pair<float, uint>>& candidates, std::vector<uint>& neighbors,
+                  uint m = 0) const {
         neighbors.clear();
 
         // - initialize the active list A
@@ -1104,10 +1140,9 @@ class Graph {
         return;
     }
 
-
-    void fixed_hsp_test(uint x, const std::vector<std::pair<float,uint>>& candidates, std::vector<uint>& neighbors, uint m) const {
-
-        // initialize the list 
+    void fixed_hsp_test(uint x, const std::vector<std::pair<float, uint>>& candidates, std::vector<uint>& neighbors,
+                        uint m) const {
+        // initialize the list
         std::vector<std::tuple<float, uint, int>> active_list;
         for (auto val : candidates) {
             uint index = val.second;
@@ -1115,14 +1150,13 @@ class Graph {
             if (index == x) continue;  // skip self
             active_list.emplace_back(distance, index, 0);
         }
-        neighbors.clear();   
+        neighbors.clear();
 
         // sort by increasing distance to the node
         std::sort(active_list.begin(), active_list.end());
 
         // Find each [modified] hsp neighbors, fixed at d
         for (uint i = 0; i < m; i++) {
-
             // find the next neighbor
             uint it1 = 0;  // iterator to next neighbor
             int interference1 = 1000000;
@@ -1160,7 +1194,8 @@ class Graph {
         return;
     }
 
-    void test_knn(uint x, const std::vector<std::pair<float,uint>>& candidates, std::vector<uint>& neighbors, uint m) const {
+    void test_knn(uint x, const std::vector<std::pair<float, uint>>& candidates, std::vector<uint>& neighbors,
+                  uint m) const {
         auto active_list = candidates;
         std::sort(active_list.begin(), active_list.end());
 
@@ -1186,7 +1221,6 @@ class Graph {
 
     //-------------------------- MARK: SEARCH
     std::vector<std::pair<float, uint>> search(const float* query_ptr, uint beam_size, uint k) {
-
         std::vector<uint> start_nodes = start_nodes_;
         if (top_layer_graph_ != nullptr) {
             start_nodes = {top_layer_graph_->search_start_node(query_ptr)};
@@ -1196,12 +1230,12 @@ class Graph {
 
         // convert to vector of size k
         std::vector<std::pair<float, uint>> top_candidates(k);
-        for (int i = (int) k - 1; i >= 0; i--) {
+        for (int i = (int)k - 1; i >= 0; i--) {
             float distance = res.top().first;
             uint element_id = res.top().second;
             res.pop();
 
-            uint element_label = node_labels_[element_id]; // get the label id
+            uint element_label = node_labels_[element_id];  // get the label id
             top_candidates[i] = {distance, element_label};
         }
         return top_candidates;
@@ -1213,12 +1247,27 @@ class Graph {
         return node_labels_[node_id];
     }
 
-
     std::vector<std::pair<float, uint>> search_brute_force(const float* query_ptr, uint k) {
+        std::vector<uint8_t> query_rep(bytes_per_vector_);
+        quantize_vector(query_ptr,query_rep.data());
+
 
         std::priority_queue<std::pair<float, uint>> pq;
         for (uint i = 0; i < dataset_size_; i++) {
-            float distance = compute_distance(query_ptr, i);
+            // float distance = compute_distance(query_ptr, i);
+            uint8_t* node_rep = (uint8_t*) (getDataByInternalId(i));
+
+            uint32_t distance = 0;
+            for (uint j = 0; j < bytes_per_vector_; j++) {
+                // uint8_t diff = query_rep[j] ^ node_rep[j];
+                // distance += diff * diff;
+                // uint8_t diff = bits_a ^ bits_b;
+                // distance += (uint32_t) (__builtin_popcount(query_rep[j] ^ node_rep[j]));
+                distance += (uint32_t) (query_rep[j] ^ node_rep[j]);
+            }
+    
+
+
             if (pq.size() < k || distance < pq.top().first) {
                 pq.emplace(distance, i);
                 if (pq.size() > k) pq.pop();
@@ -1227,12 +1276,12 @@ class Graph {
 
         // convert to vector of size k
         std::vector<std::pair<float, uint>> top_candidates(k);
-        for (int i = (int) k - 1; i >= 0; i--) {
+        for (int i = (int)k - 1; i >= 0; i--) {
             float distance = pq.top().first;
             uint element_id = pq.top().second;
             pq.pop();
 
-            uint element_label = node_labels_[element_id]; // get the label id
+            uint element_label = node_labels_[element_id];  // get the label id
             top_candidates[i] = {distance, element_label};
         }
         return top_candidates;

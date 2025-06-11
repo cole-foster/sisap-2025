@@ -19,3 +19,5 @@ tmp/
 *.bin
 *.sh
 t_*
+*.txt
+*.out

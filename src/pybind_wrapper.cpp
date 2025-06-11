@@ -99,15 +99,21 @@ class Task1 {
     }
 
     /* perform iterative construction */
-    void build(uint num_candidates, uint num_hops = 100, uint num_iterations = 1) {
+    void build(uint num_candidates, uint num_hops, uint num_nodes, uint num_iterations = 1) {
         // alg_->init_random_graph();
-        uint num_nodes = (uint) 10*sqrt(dataset_size_);
-        alg_->init_empty_but_top_layer(num_nodes);
+        {
+            printf(" * top layer nodes: %u\n", num_nodes);
+            auto tStart = std::chrono::high_resolution_clock::now();
+            alg_->init_empty_but_top_layer(num_nodes);
+            auto tEnd = std::chrono::high_resolution_clock::now();
+            double time = std::chrono::duration_cast<std::chrono::duration<double>>(tEnd - tStart).count();
+            printf(" * top layer time: %.4f\n", time);
+        }
         for (uint i = 0; i < num_iterations; i++) {
             printf(" * iteration %u/%u\n", i + 1, num_iterations);
             // alg_->init_top_layer_graph(4000, 32, 1);
             alg_->graph_refinement_iteration(num_candidates, num_hops);
-            alg_->trim_graph_hsp();  // trim the graph to keep only the top 10% of neighbors
+            // alg_->trim_graph_hsp();  // trim the graph to keep only the top 10% of neighbors
             alg_->print_graph_stats();
         }
     }
@@ -282,6 +288,6 @@ PYBIND11_MODULE(Submission, m) {
             py::arg("num_neighbors"), py::arg("num_bits"), py::arg("space") = "ip")
         .def("train", &Task1::train_quantizer, py::arg("data"))
         .def("add_items", &Task1::addItems, py::arg("data"))
-        .def("build", &Task1::build, py::arg("num_candidates"), py::arg("num_hops"), py::arg("num_iterations") = 1)
+        .def("build", &Task1::build, py::arg("num_candidates"), py::arg("num_hops"), py::arg("num_nodes"), py::arg("num_iterations") = 1)
         .def("search", &Task1::search, py::arg("data"), py::arg("k"), py::arg("beam_size") = 1, py::arg("num_hops") = 1000);
 }

@@ -369,11 +369,11 @@ class KNN {
 
             /* initialize the random graph*/
             // top_layer_graph_->init_random_graph();
-            top_layer_graph_->init_empty_but_top_layer(num_nodes);
+            top_layer_graph_->init_empty_but_top_layer((uint) 10*sqrt(num_nodes));
 
             /* refinement based graph construction */
             for (uint i = 0; i < num_iterations; i++) {
-                top_layer_graph_->graph_refinement_iteration(64, 32);
+                top_layer_graph_->graph_refinement_iteration(32, 32);
             }
         }
 
@@ -407,7 +407,7 @@ class KNN {
         /* initialize the observation map */
         {
             auto tStart = std::chrono::high_resolution_clock::now();
-            uint num_nodes_top = (uint) 10*sqrt(dataset_size_); // (uint) sqrt(dataset_size_); // ((double) dataset_size_ / (double) max_neighbors_);
+            uint num_nodes_top = omap_size_; // (uint) sqrt(dataset_size_); // ((double) dataset_size_ / (double) max_neighbors_);
             if (num_nodes_top > 100) {
                 uint num_neighbors_top = omap_num_neighbors_;
                 uint num_iterations_top = 1;
@@ -426,8 +426,7 @@ class KNN {
         /* do the random batches */
         printf(" * creating graph in batches...\n");
         uint batch_size = 10000;
-        std::vector<std::vector<std::pair<float, uint>>> batch_neighbors(
-            batch_size, std::vector<std::pair<float, uint>>(num_neighbors, {HUGE_VALF, 0}));
+        std::vector<std::vector<std::pair<float, uint>>> batch_neighbors(batch_size);
         uint batch_count = 0;
         uint batch_begin = 0;
         while (batch_begin < dataset_size_) {
@@ -453,10 +452,9 @@ class KNN {
                     res = internal_beam_search(query_ptr, {res1[0].second}, beam_size, num_hops);
                     for (auto val : res1) {
                         res.emplace(val.first, val.second);
-                        while (res.size() > num_neighbors) res.pop();
                     }
                 }
-                while (res.size() > num_neighbors) res.pop();
+                // while (res.size() > num_neighbors) res.pop();
 
                 /* save the neighbors */
                 queue_to_reverse_vector(res, batch_neighbors[qid]);

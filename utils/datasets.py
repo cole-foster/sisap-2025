@@ -61,7 +61,7 @@ DATASETS = {
             'url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/benchmark-dev-pubmed23.h5?download=true',
             'queries': lambda x: x['otest']['queries'],
             'data': lambda x: x['train'],
-            'gt_url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/allknn-benchmark-dev-gooaq.h5?download=true',
+            'gt_url': 'https://huggingface.co/datasets/sadit/SISAP2025/resolve/main/benchmark-dev-pubmed23.h5?download=true',
             'gt_I': lambda x: x['otest']['knns'],
             'k': 30,
         }
